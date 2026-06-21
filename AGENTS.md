@@ -16,6 +16,9 @@ This document serves as the primary source of truth for any AI agent working on 
 - **Bundler:** Vite (v7.3.5)
 - **Styling:** Tailwind CSS v4 (v4.3.1) using `@tailwindcss/vite` plugin
 - **Dev Tools:** solid-devtools (v0.34.5)
+- **Backend:** Express.js (v4.22) with TypeScript via tsx
+- **Database:** MongoDB Atlas via Mongoose (v8.24)
+- **Auth:** bcryptjs (password hashing) + jsonwebtoken (JWT)
 - **Font Stack:**
     - Display: Anybody (uppercase, wide tracking)
     - Body: Source Serif 4 (serif, sentence case)
@@ -34,16 +37,34 @@ This document serves as the primary source of truth for any AI agent working on 
 - **Weights:** Bold weights are strictly prohibited. All type is weight 400.
 
 ## 4. Application Architecture
-### Routing
+### Frontend Routing
 Implemented as simple signal-based state management in `App.tsx`.
 - `currentPage` signal determines which page component is rendered.
 - `setCurrentPage` is passed to `TopNav` and `BottomNav` for navigation.
+
+### Backend (server/)
+- Express.js server at `server/src/index.ts` on port 3001.
+- MongoDB connection via Mongoose using `MONGODB_URI` env variable.
+- JWT-based auth with tokens stored in localStorage on the client.
 
 ### Project Structure
 - `src/App.tsx`: Main entry and routing shell.
 - `src/index.css`: Tailwind v4 `@theme` configuration and base styles.
 - `src/components/`: Shared UI components (TopNav, BottomNav, etc.).
 - `src/pages/`: Page-level components.
+- `src/api.ts`: Frontend API utility for backend communication.
+- `server/`: Backend Express server.
+  - `server/src/index.ts`: Server entry point.
+  - `server/src/models/User.ts`: Mongoose User model with bcrypt hashing.
+  - `server/src/routes/auth.ts`: Auth routes (POST /api/auth/signin, POST /api/auth/register).
+  - `server/src/middleware/auth.ts`: JWT authentication middleware.
+
+### Auth Flow
+1. User enters Operator ID and Access Key on `AuthPage`.
+2. Frontend calls `POST /api/auth/signin`.
+3. Server validates credentials against MongoDB, returns JWT token.
+4. Token is stored in localStorage via `src/api.ts` utility.
+5. App navigates to Dashboard. Token persists across sessions.
 
 ## 5. Current Implementation State
 ### Pages
@@ -63,4 +84,6 @@ Implemented as simple signal-based state management in `App.tsx`.
 2. **Type Consistency:** Always use the typography trinity (Anybody/Source Serif/JetBrains Mono).
 3. **Tailwind v4:** Use the new CSS-first theme tokens defined in `index.css`.
 4. **Solid.js Patterns:** Use `createSignal` for state and `onMount` for lifecycle events.
-5. **Update Context:** Every change to the feature set must be reflected in this file.
+5. **Environment Setup:** Copy `.env.example` to `.env` and fill in `MONGODB_URI` and `JWT_SECRET` before running the server.
+6. **Running the App:** Use `bun run dev:all` to start both frontend (port 3000) and backend (port 3001) concurrently.
+7. **Update Context:** Every change to the feature set must be reflected in this file.

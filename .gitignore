@@ -12,6 +12,8 @@ app.config.timestamp_*.js
 
 # dependencies
 /node_modules
+/server/node_modules
+/server/dist
 
 # IDEs and editors
 /.idea
@@ -31,4 +33,4 @@ Thumbs.db
 getdesign/
 
 
-AGENT.md
+AGENTS.md
