@@ -22,6 +22,9 @@ app.use(cors({ origin: ALLOWED_ORIGINS }));
 app.use(express.json());
 
 // Routes
+app.get("/", (_req, res) => {
+  res.redirect("/api/health");
+});
 app.use("/api/auth", authRoutes);
 
 // Health check
