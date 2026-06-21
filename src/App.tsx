@@ -22,7 +22,7 @@ const App: Component = () => {
   return (
     <div class="bg-surface text-on-surface min-h-screen font-body-md">
       {isAppPage() && <TopNav current={currentPage() as any} onNavigate={setCurrentPage as any} onLogout={() => setCurrentPage("landing")} />}
-      <main classList={{ "pt-xl pb-xl md:pb-0": isAppPage() }}>
+      <main classList={{ "pb-xl md:pb-0": isAppPage() }}>
         {currentPage() === "landing" && <Landing onEnter={() => setCurrentPage("auth")} />}
         {currentPage() === "auth" && (
           <AuthPage

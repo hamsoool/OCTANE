@@ -6,10 +6,30 @@ interface LandingProps {
 
 const Landing: Component<LandingProps> = (props) => {
   const [scrollY, setScrollY] = createSignal(0);
+  let placeholderRef: HTMLDivElement | undefined;
+  const [octOffset, setOctOffset] = createSignal(300);
+  const octProgress = () => Math.min(scrollY() / octOffset(), 1);
 
   onMount(() => {
     const handleScroll = () => setScrollY(window.scrollY);
     window.addEventListener("scroll", handleScroll, { passive: true });
+
+    const updateOffset = () => {
+      if (placeholderRef) {
+        const rect = placeholderRef.getBoundingClientRect();
+        const docTop = rect.top + window.scrollY;
+        // The header vertical center is at 32px (64px / 2).
+        // The spacer's vertical center is at docTop + 53 / 2 = docTop + 26.5px.
+        // We want the text center to align with spacer center when scrollY is 0.
+        // So: 32 + octOffset = docTop + 26.5 => octOffset = docTop - 5.5
+        setOctOffset(docTop - 5.5);
+      }
+    };
+
+    updateOffset();
+    window.addEventListener("resize", updateOffset);
+    window.addEventListener("load", updateOffset);
+    const timer = setTimeout(updateOffset, 100);
 
     const revealEls = document.querySelectorAll(".reveal");
     const observer = new IntersectionObserver(
@@ -26,6 +46,9 @@ const Landing: Component<LandingProps> = (props) => {
 
     return () => {
       window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("resize", updateOffset);
+      window.removeEventListener("load", updateOffset);
+      clearTimeout(timer);
       observer.disconnect();
     };
   });
@@ -37,11 +60,30 @@ const Landing: Component<LandingProps> = (props) => {
   return (
     <div class="bg-black text-on-surface">
       {/* Landing Top Nav */}
-      <header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-container-margin h-xl bg-black/80 backdrop-blur-sm border-b border-hairline">
+      <header classList={{
+        "fixed top-0 left-0 w-full z-50 flex justify-between items-center px-container-margin h-xl transition-all duration-300": true,
+        "bg-black/80 backdrop-blur-sm border-b border-hairline": scrollY() > 0,
+        "bg-transparent border-b border-transparent": scrollY() === 0,
+      }}>
         <button class="font-label-md text-label-md uppercase hover:opacity-60 transition-opacity">
           MENU
         </button>
-        <h1 class="font-headline-md text-headline-md text-primary uppercase">OCTANE</h1>
+        <div
+          class="absolute left-1/2"
+          style={{
+            "font-family": "'Anybody', sans-serif",
+            "font-weight": 400,
+            color: "#ffffff",
+            "text-transform": "uppercase",
+            "white-space": "nowrap",
+            "font-size": `${48 - octProgress() * 24}px`,
+            "line-height": `${1.1 + octProgress() * 0.2}`,
+            "letter-spacing": `${4 - octProgress() * 2}px`,
+            transform: `translate(-50%, ${Math.max(octOffset() - scrollY(), 0)}px)`,
+          }}
+        >
+          OCTANE
+        </div>
         <button
           onClick={props.onEnter}
           class="font-label-md text-label-md uppercase tracking-[2.5px] hover:opacity-60 transition-opacity"
@@ -52,25 +94,23 @@ const Landing: Component<LandingProps> = (props) => {
 
       {/* Hero */}
       <section class="relative h-screen w-full overflow-hidden flex items-center justify-center">
-        <div class="absolute inset-0 z-0">
+        <div class="absolute inset-0 z-0 overflow-hidden">
           <div
             class="w-full h-[120%] bg-cover bg-center opacity-60"
             style={{
               "background-image":
-                "url('https://lh3.googleusercontent.com/aida-public/AB6AXuBL2U2mJvOgfRZv1cyJeaT2l9wZ11jnGHrLXi4CUrH4xBLDoqbVf-9aiIOdU82G7ynuH003KNlmDKKTrx2VWVam9KLz9nfsKuiRHwHuDtpPwmDMH--nmaprFasY0rqjupdH44aIc2iB1Qy2AlUugbcnHYtGHhYZy2p9Z7gUjLlPTW8-j_Whk6WDpV6MF-0Yewi2kwqRT9IUuj9njZVZS4j6Gmhj42xLHBBZ7-osuVoRrf9JdJIBQ2KSFuGcgYbeIrKwjSGkw65hH6U')",
+                "url('/ZAMBALES.png')",
               transform: `translateY(${scrollY() * 0.3}px)`,
             }}
           ></div>
         </div>
         <div class="relative z-10 text-center px-container-margin max-w-4xl">
-          <p class="font-label-md text-label-md text-text-muted uppercase mb-sm reveal">
-            THE GLOBAL STANDARD
+          <p class="-mt-[10px] font-label-md text-label-md text-text-muted uppercase mb-[8px] reveal">
+            A LOCAL PASSION PROJECT
           </p>
-          <h1 class="font-headline-xl text-headline-xl text-primary uppercase mb-sm reveal">
-            PRECISION FUEL<br />TELEMETRY
-          </h1>
+          <div ref={placeholderRef} class="h-[53px] mb-[8px]"></div>
           <p class="font-label-md text-label-md text-text-muted mb-lg uppercase reveal">
-            REAL-TIME ENERGY DATA NETWORK
+            Zambales Fuel Price Watchlist
           </p>
           <div class="reveal flex flex-col sm:flex-row items-center justify-center gap-sm">
             <button

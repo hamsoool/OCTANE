@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, type Component } from "solid-js";
+import { createSignal, onMount, onCleanup, type Component } from "solid-js";
 import { getOperatorId, clearToken } from "../api";
 
 type Page = "dashboard" | "watchlist" | "map" | "stations";
@@ -17,8 +17,18 @@ const navItems: { page: Page; label: string }[] = [
 ];
 
 const TopNav: Component<TopNavProps> = (props) => {
+  const [scrolled, setScrolled] = createSignal(false);
   const [menuOpen, setMenuOpen] = createSignal(false);
   let menuRef: HTMLDivElement | undefined;
+
+  const handleScroll = () => setScrolled(window.scrollY > 0);
+
+  onMount(() => {
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+  });
+
+  onCleanup(() => window.removeEventListener("scroll", handleScroll));
 
   const handleClickOutside = (e: MouseEvent) => {
     if (menuRef && !menuRef.contains(e.target as Node)) {
@@ -38,8 +48,13 @@ const TopNav: Component<TopNavProps> = (props) => {
   const operatorId = getOperatorId();
 
   return (
-    <header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-container-margin h-xl bg-surface border-b border-hairline">
-      <div class="font-headline-md text-headline-md tracking-[4px] text-primary uppercase">OCTANE</div>
+    <header
+      classList={{
+        "fixed top-0 left-0 w-full z-50 flex justify-end md:justify-center items-center px-container-margin h-xl transition-all duration-300": true,
+        "bg-surface border-b border-hairline": scrolled(),
+        "bg-transparent border-b border-transparent": !scrolled(),
+      }}
+    >
       <nav class="hidden md:flex gap-lg h-full items-center">
         {navItems.map((item) => (
           <button
@@ -54,7 +69,7 @@ const TopNav: Component<TopNavProps> = (props) => {
           </button>
         ))}
       </nav>
-      <div ref={menuRef} class="relative">
+      <div ref={menuRef} class="relative md:absolute md:right-container-margin md:top-1/2 md:-translate-y-1/2">
         <button
           onClick={() => setMenuOpen(!menuOpen())}
           class="material-symbols-outlined text-primary p-2"

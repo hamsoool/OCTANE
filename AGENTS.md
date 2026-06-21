@@ -68,7 +68,7 @@ Implemented as simple signal-based state management in `App.tsx`.
 
 ## 5. Current Implementation State
 ### Pages
-- `Landing.tsx`: Marketing entry page with scroll-reveal animations, hero section, and feature showcases.
+- `Landing.tsx`: Marketing entry page with scroll-reveal animations, scroll-driven OCTANE wordmark animation, and feature showcases. Inline nav becomes opaque on scroll. OCTANE wordmark lives in the fixed navbar header (absolutely positioned, `translateX(-50%)` centered) and uses signal-driven inline styles (`translateY`, `font-size`, `line-height`, `letter-spacing`) to animate from the hero content position to the navbar center as the user scrolls. No CSS `transform: scale()` is used — transitions are done purely via font-size interpolation.
 - `AuthPage.tsx`: Secure authentication interface for operator access.
 - `Dashboard.tsx`: Main telemetry overview with regional benchmarks and market trends.
 - `Watchlist.tsx`: User-saved stations feed with real-time pricing and distance.
@@ -76,7 +76,7 @@ Implemented as simple signal-based state management in `App.tsx`.
 - `Stations.tsx`: Detailed list of station terminals in a region with status and grade pricing.
 
 ### Components
-- `TopNav`: Desktop-first navigation with wordmark and links.
+- `TopNav`: Desktop-first navigation with links and settings dropdown (no wordmark — wordmark lives in Landing's scroll animation).
 - `BottomNav`: Mobile-first navigation tabs.
 
 ## 6. Development Guidelines
