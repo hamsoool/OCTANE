@@ -6,7 +6,7 @@ import authRoutes from "./routes/auth.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const MONGODB_URI = process.env.MONGODB_URI;
+const MONGODB_URI = process.env.MONGODB_URI ?? "";
 
 if (!MONGODB_URI) {
   console.error("MONGODB_URI environment variable is not set.");
