@@ -1,0 +1,66 @@
+# AGENTS.md - Project Context for LLMs
+
+This document serves as the primary source of truth for any AI agent working on the OCTANE project. It provides the necessary context to maintain consistency in architecture, design, and feature implementation.
+
+**IMPORTANT:** Every agent MUST read this file at the start of a session. Every agent MUST update this file whenever a new feature is added, a page is created, or the architecture is modified.
+
+## 1. Project Overview
+**Project Name:** OCTANE
+**Purpose:** A high-end, region-based fuel price intelligence and watchlist application.
+**Current Status:** Prototype / Initial Frontend.
+**Aesthetic:** "Machined Precision" — austere, elite, clinical, monochrome. Inspired by automotive telemetry.
+
+## 2. Tech Stack
+- **Framework:** Solid.js (v1.9.13)
+- **Language:** TypeScript (v5.9.3)
+- **Bundler:** Vite (v7.3.5)
+- **Styling:** Tailwind CSS v4 (v4.3.1) using `@tailwindcss/vite` plugin
+- **Dev Tools:** solid-devtools (v0.34.5)
+- **Font Stack:**
+    - Display: Anybody (uppercase, wide tracking)
+    - Body: Source Serif 4 (serif, sentence case)
+    - Data/Labels: JetBrains Mono (monospace, uppercase)
+
+## 3. Design System (Machined Precision)
+**Core Rules:**
+- **Canvas:** Pure black (`#000000`) or surface black (`#131313`).
+- **Palette:** Monochrome. Pure white (`#ffffff`) for primary, `#cccccc` for body, `#999999` for muted. Single accent: Ice-blue (`#c3d9f3`).
+- **Shapes:** Binary. All containers/cards must have `0px` corner radius (`rounded-none`). ONLY interactive buttons/chips use the pill shape (`rounded-full`).
+- **Dividers:** 1px hairline borders (`#262626`) or hairline-strong (`#3a3a3a`).
+- **Typography Trinity:**
+    - `text-headline-xl/lg/md`: Anybody, weight 400, uppercase, wide tracking.
+    - `text-body-lg/md`: Source Serif 4, weight 400, sentence case.
+    - `text-label-md/sm` and `text-data-lg`: JetBrains Mono, weight 400, uppercase.
+- **Weights:** Bold weights are strictly prohibited. All type is weight 400.
+
+## 4. Application Architecture
+### Routing
+Implemented as simple signal-based state management in `App.tsx`.
+- `currentPage` signal determines which page component is rendered.
+- `setCurrentPage` is passed to `TopNav` and `BottomNav` for navigation.
+
+### Project Structure
+- `src/App.tsx`: Main entry and routing shell.
+- `src/index.css`: Tailwind v4 `@theme` configuration and base styles.
+- `src/components/`: Shared UI components (TopNav, BottomNav, etc.).
+- `src/pages/`: Page-level components.
+
+## 5. Current Implementation State
+### Pages
+- `Landing.tsx`: Marketing entry page with scroll-reveal animations, hero section, and feature showcases.
+- `AuthPage.tsx`: Secure authentication interface for operator access.
+- `Dashboard.tsx`: Main telemetry overview with regional benchmarks and market trends.
+- `Watchlist.tsx`: User-saved stations feed with real-time pricing and distance.
+- `MapPage.tsx`: Interactive regional map with search and nearby units side-panel.
+- `Stations.tsx`: Detailed list of station terminals in a region with status and grade pricing.
+
+### Components
+- `TopNav`: Desktop-first navigation with wordmark and links.
+- `BottomNav`: Mobile-first navigation tabs.
+
+## 6. Development Guidelines
+1. **Maintain Aesthetics:** Never introduce rounded corners to cards or shadows. Keep the palette monochrome.
+2. **Type Consistency:** Always use the typography trinity (Anybody/Source Serif/JetBrains Mono).
+3. **Tailwind v4:** Use the new CSS-first theme tokens defined in `index.css`.
+4. **Solid.js Patterns:** Use `createSignal` for state and `onMount` for lifecycle events.
+5. **Update Context:** Every change to the feature set must be reflected in this file.

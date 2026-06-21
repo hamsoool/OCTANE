@@ -44,9 +44,9 @@ const Landing: Component<LandingProps> = (props) => {
         <h1 class="font-headline-md text-headline-md text-primary uppercase">OCTANE</h1>
         <button
           onClick={props.onEnter}
-          class="font-label-md text-label-md uppercase hover:opacity-60 transition-opacity"
+          class="font-label-md text-label-md uppercase tracking-[2.5px] hover:opacity-60 transition-opacity"
         >
-          ACCESS
+          SIGN IN
         </button>
       </header>
 
@@ -75,15 +75,15 @@ const Landing: Component<LandingProps> = (props) => {
           <div class="reveal flex flex-col sm:flex-row items-center justify-center gap-sm">
             <button
               onClick={() => scrollTo("regional-intelligence")}
-              class="border border-primary px-lg py-sm font-label-md text-label-md text-primary uppercase rounded-full hover:bg-primary hover:text-black transition-all duration-300 active:scale-95"
+              class="px-lg py-sm font-label-md text-label-md text-text-muted uppercase tracking-[2.5px] hover:text-primary transition-colors"
             >
               EXPLORE THE SYSTEM
             </button>
             <button
               onClick={props.onEnter}
-              class="px-lg py-sm font-label-md text-label-md text-text-muted uppercase hover:text-primary transition-colors"
+              class="border border-primary px-lg py-sm font-label-md text-label-md text-primary uppercase tracking-[2.5px] rounded-full hover:bg-primary hover:text-black transition-all duration-300 active:scale-95"
             >
-              ENTER DASHBOARD
+              SIGN IN
             </button>
           </div>
         </div>
@@ -210,9 +210,9 @@ const Landing: Component<LandingProps> = (props) => {
           <div class="reveal">
             <button
               onClick={props.onEnter}
-              class="border border-primary px-lg py-sm font-label-md text-label-md text-primary uppercase rounded-full hover:bg-primary hover:text-black transition-all duration-300 active:scale-95"
+              class="border border-primary px-lg py-sm font-label-md text-label-md text-primary uppercase tracking-[2.5px] rounded-full hover:bg-primary hover:text-black transition-all duration-300 active:scale-95"
             >
-              GET STARTED
+              SIGN IN
             </button>
           </div>
         </div>

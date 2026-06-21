@@ -2,12 +2,13 @@ import { createSignal, type Component } from "solid-js";
 import TopNav from "./components/TopNav";
 import BottomNav from "./components/BottomNav";
 import Landing from "./pages/Landing";
+import AuthPage from "./pages/AuthPage";
 import Dashboard from "./pages/Dashboard";
 import Watchlist from "./pages/Watchlist";
 import MapPage from "./pages/MapPage";
 import Stations from "./pages/Stations";
 
-type Page = "landing" | "dashboard" | "watchlist" | "map" | "stations";
+type Page = "landing" | "auth" | "dashboard" | "watchlist" | "map" | "stations";
 
 const App: Component = () => {
   const [currentPage, setCurrentPage] = createSignal<Page>("landing");
@@ -22,7 +23,13 @@ const App: Component = () => {
     <div class="bg-surface text-on-surface min-h-screen font-body-md">
       {isAppPage() && <TopNav current={currentPage() as any} onNavigate={setCurrentPage as any} />}
       <main classList={{ "pt-xl pb-xl md:pb-0": isAppPage() }}>
-        {currentPage() === "landing" && <Landing onEnter={() => setCurrentPage("dashboard")} />}
+        {currentPage() === "landing" && <Landing onEnter={() => setCurrentPage("auth")} />}
+        {currentPage() === "auth" && (
+          <AuthPage
+            onBack={() => setCurrentPage("landing")}
+            onSignIn={() => setCurrentPage("dashboard")}
+          />
+        )}
         {currentPage() === "dashboard" && <Dashboard />}
         {currentPage() === "watchlist" && <Watchlist />}
         {currentPage() === "map" && <MapPage />}
