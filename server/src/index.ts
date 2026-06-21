@@ -15,7 +15,10 @@ if (!MONGODB_URI) {
 }
 
 // Middleware
-app.use(cors({ origin: ["http://localhost:3000", "http://127.0.0.1:3000"] }));
+const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(",").map((o) => o.trim())
+  : ["http://localhost:3000", "http://127.0.0.1:3000"];
+app.use(cors({ origin: ALLOWED_ORIGINS }));
 app.use(express.json());
 
 // Routes
