@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret";
 
 export interface AuthRequest extends Request {
-  user?: { id: string; operatorId: string };
+  user?: { id: string; username: string };
 }
 
 export const authenticateToken = (
@@ -21,7 +21,7 @@ export const authenticateToken = (
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { id: string; operatorId: string };
+    const decoded = jwt.verify(token, JWT_SECRET) as { id: string; username: string };
     req.user = decoded;
     next();
   } catch {

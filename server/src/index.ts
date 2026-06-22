@@ -37,6 +37,8 @@ async function start() {
   try {
     await mongoose.connect(MONGODB_URI);
     console.log("Connected to MongoDB Atlas");
+    await mongoose.connection.syncIndexes();
+    console.log("Indexes synced");
 
     app.listen(PORT, () => {
       console.log(`OCTANE server running on port ${PORT}`);

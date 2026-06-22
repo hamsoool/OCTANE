@@ -39,13 +39,13 @@ export function isAuthenticated(): boolean {
   return !!getToken();
 }
 
-export function getOperatorId(): string | null {
+export function getUsername(): string | null {
   const token = getToken();
   if (!token) return null;
   try {
     const payload = token.split(".")[1];
     const decoded = JSON.parse(atob(payload));
-    return decoded.operatorId || null;
+    return decoded.username || null;
   } catch {
     return null;
   }

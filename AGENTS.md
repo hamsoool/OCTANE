@@ -55,16 +55,25 @@ Implemented as simple signal-based state management in `App.tsx`.
 - `src/api.ts`: Frontend API utility for backend communication.
 - `server/`: Backend Express server.
   - `server/src/index.ts`: Server entry point.
-  - `server/src/models/User.ts`: Mongoose User model with bcrypt hashing.
-  - `server/src/routes/auth.ts`: Auth routes (POST /api/auth/signin, POST /api/auth/register).
+  - `server/src/models/User.ts`: Mongoose User model with bcrypt hashing, AES-256-GCM encrypted userId.
+  - `server/src/routes/auth.ts`: Auth routes (POST /api/auth/signin, POST /api/auth/register, POST /api/auth/verify).
   - `server/src/middleware/auth.ts`: JWT authentication middleware.
+  - `server/src/utils/cipher.ts`: AES-256-GCM encrypt/decrypt utility.
+  - `server/src/utils/email.ts`: Brevo transactional email sender with 2FA code template.
 
 ### Auth Flow
-1. User enters Operator ID and Access Key on `AuthPage`.
-2. Frontend calls `POST /api/auth/signin`.
-3. Server validates credentials against MongoDB, returns JWT token.
-4. Token is stored in localStorage via `src/api.ts` utility.
-5. App navigates to Dashboard. Token persists across sessions.
+1. User enters username, email (register only), and password on `AuthPage`.
+2. Frontend calls `POST /api/auth/signin` or `/api/auth/register`.
+3. **Registration:** Server creates user (unverified), generates 6-digit code, sends via Brevo email, returns `{ needsVerification: true, userId, email }`.
+4. **Sign In:** If user is unverified, server generates and sends new code, returns `{ needsVerification: true }`.
+5. Frontend shows 6-digit OTP input. User enters code, calls `POST /api/auth/verify`.
+6. Server validates code, marks user as verified, returns JWT token containing userId, username, and role.
+7. Token is stored in localStorage via `src/api.ts` utility.
+8. App navigates to Dashboard. Token persists across sessions.
+
+### User Roles
+- `regular` — default role for new registrations (after the first user).
+- `admin` — automatically assigned to the first registered user. Can be promoted manually via MongoDB.
 
 ## 5. Current Implementation State
 ### Pages

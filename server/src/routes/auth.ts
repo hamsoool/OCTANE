@@ -2,22 +2,27 @@ import { Router, type Request, type Response } from "express";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import User from "../models/User.js";
+import { sendVerificationCode } from "../utils/email.js";
 
 const router = Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret";
 
+function generateCode(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
 // POST /api/auth/signin
 router.post("/signin", async (req: Request, res: Response) => {
   try {
-    const { operatorId, password } = req.body;
+    const { username, password } = req.body;
 
-    if (!operatorId || !password) {
-      res.status(400).json({ message: "Operator ID and Access Key are required." });
+    if (!username || !password) {
+      res.status(400).json({ message: "Username and password are required." });
       return;
     }
 
-    const user = await User.findOne({ operatorId: operatorId.toUpperCase().trim() });
+    const user = await User.findOne({ username: username.toUpperCase().trim() });
     if (!user) {
       res.status(401).json({ message: "Invalid credentials." });
       return;
@@ -29,8 +34,19 @@ router.post("/signin", async (req: Request, res: Response) => {
       return;
     }
 
+    if (!user.verified) {
+      const code = generateCode();
+      user.verificationCode = code;
+      user.verificationExpires = new Date(Date.now() + 10 * 60 * 1000);
+      await user.save();
+      sendVerificationCode({ to: user.email, username: user.username, code }).catch(console.error);
+
+      res.json({ needsVerification: true, userId: user.userId, email: user.email });
+      return;
+    }
+
     const token = jwt.sign(
-      { id: user._id, userId: user.userId, operatorId: user.operatorId, role: user.role },
+      { id: user._id, userId: user.userId, username: user.username, role: user.role },
       JWT_SECRET,
       { expiresIn: "24h" }
     );
@@ -39,7 +55,7 @@ router.post("/signin", async (req: Request, res: Response) => {
       message: "Authorization granted.",
       token,
       userId: user.userId,
-      operatorId: user.operatorId,
+      username: user.username,
       role: user.role,
     });
   } catch (error) {
@@ -48,50 +64,110 @@ router.post("/signin", async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/auth/register (for initial setup only)
+// POST /api/auth/register
 router.post("/register", async (req: Request, res: Response) => {
   try {
-    const { operatorId, password } = req.body;
+    const { username, email, password } = req.body;
 
-    if (!operatorId || !password) {
-      res.status(400).json({ message: "Operator ID and Access Key are required." });
+    if (!username || !email || !password) {
+      res.status(400).json({ message: "Username, email address, and password are required." });
       return;
     }
 
-    const existingUser = await User.findOne({ operatorId: operatorId.toUpperCase().trim() });
+    const existingUser = await User.findOne({
+      $or: [
+        { username: username.toUpperCase().trim() },
+        { email: email.toLowerCase().trim() },
+      ],
+    });
     if (existingUser) {
-      res.status(409).json({ message: "Operator ID already exists." });
+      const field = existingUser.username === username.toUpperCase().trim() ? "Username" : "Email";
+      res.status(409).json({ message: field + " already exists." });
       return;
     }
 
     const userId = "USR-" + crypto.randomBytes(4).toString("hex").toUpperCase();
     const userCount = await User.countDocuments();
     const role = userCount === 0 ? "admin" : "regular";
+    const code = generateCode();
 
     const user = new User({
       userId,
-      operatorId: operatorId.toUpperCase().trim(),
+      username: username.toUpperCase().trim(),
+      email: email.toLowerCase().trim(),
       password,
       role,
+      verificationCode: code,
+      verificationExpires: new Date(Date.now() + 10 * 60 * 1000),
     });
 
     await user.save();
+    sendVerificationCode({ to: user.email, username: user.username, code }).catch(console.error);
+
+    res.status(201).json({
+      message: "Operator registered. Check your email for the verification code.",
+      needsVerification: true,
+      userId: user.userId,
+      email: user.email,
+    });
+  } catch (error) {
+    console.error("Registration error:", error);
+    res.status(500).json({ message: "System error. Please try again." });
+  }
+});
+
+// POST /api/auth/verify
+router.post("/verify", async (req: Request, res: Response) => {
+  try {
+    const { userId, code } = req.body;
+
+    if (!userId || !code) {
+      res.status(400).json({ message: "User ID and verification code are required." });
+      return;
+    }
+
+    const user = await User.findOne({ userId });
+    if (!user) {
+      res.status(404).json({ message: "User not found." });
+      return;
+    }
+
+    if (user.verified) {
+      res.status(400).json({ message: "Already verified." });
+      return;
+    }
+
+    if (!user.verificationExpires || user.verificationExpires < new Date()) {
+      res.status(400).json({ message: "Verification code has expired. Please sign in again to request a new one." });
+      return;
+    }
+
+    const isValid = await user.compareVerificationCode(code);
+    if (!isValid) {
+      res.status(401).json({ message: "Invalid verification code." });
+      return;
+    }
+
+    user.verified = true;
+    user.verificationCode = null;
+    user.verificationExpires = null;
+    await user.save();
 
     const token = jwt.sign(
-      { id: user._id, userId: user.userId, operatorId: user.operatorId, role: user.role },
+      { id: user._id, userId: user.userId, username: user.username, role: user.role },
       JWT_SECRET,
       { expiresIn: "24h" }
     );
 
-    res.status(201).json({
-      message: "Operator registered.",
+    res.json({
+      message: "Verification successful.",
       token,
       userId: user.userId,
-      operatorId: user.operatorId,
+      username: user.username,
       role: user.role,
     });
   } catch (error) {
-    console.error("Registration error:", error);
+    console.error("Verification error:", error);
     res.status(500).json({ message: "System error. Please try again." });
   }
 });

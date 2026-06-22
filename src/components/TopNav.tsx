@@ -1,5 +1,5 @@
 import { createSignal, onMount, onCleanup, type Component } from "solid-js";
-import { getOperatorId, clearToken } from "../api";
+import { getUsername, clearToken } from "../api";
 
 type Page = "dashboard" | "watchlist" | "map" | "stations";
 
@@ -45,7 +45,7 @@ const TopNav: Component<TopNavProps> = (props) => {
     props.onLogout();
   };
 
-  const operatorId = getOperatorId();
+  const currentUsername = getUsername();
 
   return (
     <header
@@ -80,7 +80,7 @@ const TopNav: Component<TopNavProps> = (props) => {
           <div class="absolute right-0 top-full mt-xs w-56 bg-surface-card border border-hairline p-md z-50">
             <div class="mb-md">
               <div class="font-label-sm text-label-sm text-text-muted uppercase tracking-[2px] mb-xs">Operator</div>
-              <div class="font-data-lg text-data-lg text-primary uppercase">{operatorId || "—"}</div>
+              <div class="font-data-lg text-data-lg text-primary uppercase">{currentUsername || "—"}</div>
             </div>
             <div class="h-px bg-hairline mb-md"></div>
             <button
