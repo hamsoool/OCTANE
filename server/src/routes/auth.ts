@@ -50,46 +50,59 @@ router.post("/signin", async (req: Request, res: Response) => {
       return;
     }
 
-    const redis = getRedis();
+    let redis: Awaited<ReturnType<typeof getRedis>> | null = null;
+    try {
+      redis = getRedis();
+    } catch {
+      redis = null;
+    }
     const lockKey = `login:locked:${normalized}`;
     const attemptKey = `login:attempts:${normalized}`;
 
     if (redis) {
-      const locked = await redis.get(lockKey);
-      if (locked) {
-        const ttl = await redis.ttl(lockKey);
-        res.status(429).json({
-          message: `Account locked. Try again in ${formatDuration(ttl > 0 ? ttl : LOCK_DURATION_SEC)}.`,
-          locked: true,
-          lockRemaining: ttl > 0 ? ttl : LOCK_DURATION_SEC,
-        });
-        return;
+      try {
+        const locked = await redis.get(lockKey);
+        if (locked) {
+          const ttl = await redis.ttl(lockKey);
+          res.status(429).json({
+            message: `Account locked. Try again in ${formatDuration(ttl > 0 ? ttl : LOCK_DURATION_SEC)}.`,
+            locked: true,
+            lockRemaining: ttl > 0 ? ttl : LOCK_DURATION_SEC,
+          });
+          return;
+        }
+      } catch {
+        redis = null;
       }
     }
 
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       if (redis) {
-        const attempts = await redis.incr(attemptKey);
-        if (attempts === 1) {
-          await redis.expire(attemptKey, LOCK_DURATION_SEC);
-        }
-        if (attempts >= MAX_LOGIN_ATTEMPTS) {
-          await redis.setex(lockKey, LOCK_DURATION_SEC, "1");
-          await redis.del(attemptKey);
-          res.status(429).json({
-            message: `Account locked. Try again in ${formatDuration(LOCK_DURATION_SEC)}.`,
-            locked: true,
-            lockRemaining: LOCK_DURATION_SEC,
+        try {
+          const attempts = await redis.incr(attemptKey);
+          if (attempts === 1) {
+            await redis.expire(attemptKey, LOCK_DURATION_SEC);
+          }
+          if (attempts >= MAX_LOGIN_ATTEMPTS) {
+            await redis.setex(lockKey, LOCK_DURATION_SEC, "1");
+            await redis.del(attemptKey);
+            res.status(429).json({
+              message: `Account locked. Try again in ${formatDuration(LOCK_DURATION_SEC)}.`,
+              locked: true,
+              lockRemaining: LOCK_DURATION_SEC,
+            });
+            return;
+          }
+          const remaining = MAX_LOGIN_ATTEMPTS - attempts;
+          res.status(401).json({
+            message: `Invalid credentials. ${remaining} attempt${remaining !== 1 ? "s" : ""} remaining.`,
+            remaining,
           });
           return;
+        } catch {
+          // Redis unavailable — fall through to generic error
         }
-        const remaining = MAX_LOGIN_ATTEMPTS - attempts;
-        res.status(401).json({
-          message: `Invalid credentials. ${remaining} attempt${remaining !== 1 ? "s" : ""} remaining.`,
-          remaining,
-        });
-        return;
       }
 
       res.status(401).json({ message: "Invalid credentials." });
@@ -97,7 +110,11 @@ router.post("/signin", async (req: Request, res: Response) => {
     }
 
     if (redis) {
-      await redis.del(lockKey, attemptKey);
+      try {
+        await redis.del(lockKey, attemptKey);
+      } catch {
+        // ignore
+      }
     }
 
     if (!user.verified) {
