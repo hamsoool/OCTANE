@@ -14,6 +14,8 @@ if (!MONGODB_URI) {
   process.exit(1);
 }
 
+app.set("trust proxy", true);
+
 // Middleware
 const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",").map((o) => o.trim())
