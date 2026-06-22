@@ -3,13 +3,34 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import User from "../models/User.js";
 import { sendVerificationCode } from "../utils/email.js";
+import { getRedis } from "../utils/redis.js";
+import { ipRateLimit } from "../middleware/rateLimit.js";
 
 const router = Router();
 
+router.use(ipRateLimit);
+
 const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret";
+const CODE_COOLDOWN_MS = 5 * 60 * 1000;
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCK_DURATION_MS = 15 * 60 * 1000;
+const LOCK_DURATION_SEC = LOCK_DURATION_MS / 1000;
 
 function generateCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+function getRateLimitRemaining(user: { lastCodeSentAt: Date | null }): number | null {
+  if (!user.lastCodeSentAt) return null;
+  const elapsed = Date.now() - user.lastCodeSentAt.getTime();
+  if (elapsed >= CODE_COOLDOWN_MS) return null;
+  return Math.ceil((CODE_COOLDOWN_MS - elapsed) / 1000);
+}
+
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
 // POST /api/auth/signin
@@ -22,22 +43,74 @@ router.post("/signin", async (req: Request, res: Response) => {
       return;
     }
 
-    const user = await User.findOne({ username: username.toUpperCase().trim() });
+    const normalized = username.toUpperCase().trim();
+    const user = await User.findOne({ username: normalized });
     if (!user) {
       res.status(401).json({ message: "Invalid credentials." });
       return;
     }
 
+    const redis = getRedis();
+    const lockKey = `login:locked:${normalized}`;
+    const attemptKey = `login:attempts:${normalized}`;
+
+    if (redis) {
+      const locked = await redis.get(lockKey);
+      if (locked) {
+        const ttl = await redis.ttl(lockKey);
+        res.status(429).json({
+          message: `Account locked. Try again in ${formatDuration(ttl > 0 ? ttl : LOCK_DURATION_SEC)}.`,
+          locked: true,
+          lockRemaining: ttl > 0 ? ttl : LOCK_DURATION_SEC,
+        });
+        return;
+      }
+    }
+
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
+      if (redis) {
+        const attempts = await redis.incr(attemptKey);
+        if (attempts === 1) {
+          await redis.expire(attemptKey, LOCK_DURATION_SEC);
+        }
+        if (attempts >= MAX_LOGIN_ATTEMPTS) {
+          await redis.setex(lockKey, LOCK_DURATION_SEC, "1");
+          await redis.del(attemptKey);
+          res.status(429).json({
+            message: `Account locked. Try again in ${formatDuration(LOCK_DURATION_SEC)}.`,
+            locked: true,
+            lockRemaining: LOCK_DURATION_SEC,
+          });
+          return;
+        }
+        const remaining = MAX_LOGIN_ATTEMPTS - attempts;
+        res.status(401).json({
+          message: `Invalid credentials. ${remaining} attempt${remaining !== 1 ? "s" : ""} remaining.`,
+          remaining,
+        });
+        return;
+      }
+
       res.status(401).json({ message: "Invalid credentials." });
       return;
     }
 
+    if (redis) {
+      await redis.del(lockKey, attemptKey);
+    }
+
     if (!user.verified) {
+      const remaining = getRateLimitRemaining(user);
+      if (remaining !== null) {
+        res.status(429).json({ message: `Please wait ${remaining} seconds before requesting a new code.` });
+        return;
+      }
+
       const code = generateCode();
       user.verificationCode = code;
       user.verificationExpires = new Date(Date.now() + 10 * 60 * 1000);
+      user.lastCodeSentAt = new Date();
       await user.save();
       sendVerificationCode({ to: user.email, username: user.username, code }).catch(console.error);
 
@@ -99,6 +172,7 @@ router.post("/register", async (req: Request, res: Response) => {
       role,
       verificationCode: code,
       verificationExpires: new Date(Date.now() + 10 * 60 * 1000),
+      lastCodeSentAt: new Date(),
     });
 
     await user.save();

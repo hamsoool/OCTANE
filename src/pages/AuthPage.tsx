@@ -78,6 +78,9 @@ const AuthPage: Component<AuthPageProps> = (props) => {
     if (value && index < 5) {
       otpRefs[index + 1]?.focus();
     }
+    if (!value && index > 0) {
+      otpRefs[index - 1]?.focus();
+    }
   };
 
   const handleOtpKeyDown = (index: number, e: KeyboardEvent) => {

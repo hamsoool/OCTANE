@@ -1,20 +1,31 @@
 import type { Component } from "solid-js";
+import { getRole } from "../api";
 
-type Page = "dashboard" | "watchlist" | "map" | "stations";
+type Page = "dashboard" | "admin-dashboard" | "watchlist" | "map" | "stations";
 
 interface BottomNavProps {
   current: Page;
   onNavigate: (page: Page) => void;
 }
 
-const items: { page: Page; icon: string; label: string }[] = [
+const regularItems: { page: Page; icon: string; label: string }[] = [
   { page: "dashboard", icon: "dashboard", label: "DASHBOARD" },
   { page: "watchlist", icon: "star", label: "WATCHLIST" },
   { page: "map", icon: "map", label: "MAP" },
   { page: "stations", icon: "ev_station", label: "STATIONS" },
 ];
 
+const adminItems: { page: Page; icon: string; label: string }[] = [
+  { page: "admin-dashboard", icon: "admin_panel_settings", label: "ADMIN" },
+  { page: "watchlist", icon: "star", label: "WATCHLIST" },
+  { page: "map", icon: "map", label: "MAP" },
+  { page: "stations", icon: "ev_station", label: "STATIONS" },
+];
+
 const BottomNav: Component<BottomNavProps> = (props) => {
+  const isAdmin = getRole() === "admin";
+  const items = isAdmin ? adminItems : regularItems;
+
   return (
     <nav class="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-xl bg-surface px-4 border-t border-hairline">
       {items.map((item) => (

@@ -1,7 +1,7 @@
 import { createSignal, onMount, onCleanup, type Component } from "solid-js";
-import { getUsername, clearToken } from "../api";
+import { getUsername, getRole, clearToken } from "../api";
 
-type Page = "dashboard" | "watchlist" | "map" | "stations";
+type Page = "dashboard" | "admin-dashboard" | "watchlist" | "map" | "stations";
 
 interface TopNavProps {
   current: Page;
@@ -9,8 +9,15 @@ interface TopNavProps {
   onLogout: () => void;
 }
 
-const navItems: { page: Page; label: string }[] = [
+const baseNavItems: { page: Page; label: string }[] = [
   { page: "dashboard", label: "DASHBOARD" },
+  { page: "watchlist", label: "WATCHLIST" },
+  { page: "map", label: "MAP" },
+  { page: "stations", label: "STATIONS" },
+];
+
+const adminNavItems: { page: Page; label: string }[] = [
+  { page: "admin-dashboard", label: "ADMIN" },
   { page: "watchlist", label: "WATCHLIST" },
   { page: "map", label: "MAP" },
   { page: "stations", label: "STATIONS" },
@@ -46,6 +53,8 @@ const TopNav: Component<TopNavProps> = (props) => {
   };
 
   const currentUsername = getUsername();
+  const isAdmin = getRole() === "admin";
+  const navItems = isAdmin ? adminNavItems : baseNavItems;
 
   return (
     <header

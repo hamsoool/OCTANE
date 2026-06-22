@@ -19,6 +19,7 @@ This document serves as the primary source of truth for any AI agent working on 
 - **Backend:** Express.js (v4.22) with TypeScript via tsx
 - **Database:** MongoDB Atlas via Mongoose (v8.24)
 - **Auth:** bcryptjs (password hashing) + jsonwebtoken (JWT)
+- **Rate Limiting:** Upstash Redis (@upstash/redis v1.38) — IP rate limit (10/5min) + login attempt lockout (5 strikes, 15min lock)
 - **Font Stack:**
     - Display: Anybody (uppercase, wide tracking)
     - Body: Source Serif 4 (serif, sentence case)
@@ -46,6 +47,7 @@ Implemented as simple signal-based state management in `App.tsx`.
 - Express.js server at `server/src/index.ts` on port 3001.
 - MongoDB connection via Mongoose using `MONGODB_URI` env variable.
 - JWT-based auth with tokens stored in localStorage on the client.
+- Rate limiting via Upstash Redis using `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` env vars.
 
 ### Project Structure
 - `src/App.tsx`: Main entry and routing shell.
@@ -60,16 +62,18 @@ Implemented as simple signal-based state management in `App.tsx`.
   - `server/src/middleware/auth.ts`: JWT authentication middleware.
   - `server/src/utils/cipher.ts`: AES-256-GCM encrypt/decrypt utility.
   - `server/src/utils/email.ts`: Brevo transactional email sender with 2FA code template.
+  - `server/src/utils/redis.ts`: Upstash Redis client singleton.
+  - `server/src/middleware/rateLimit.ts`: IP rate limit middleware (10 requests per 5 min).
 
 ### Auth Flow
 1. User enters username, email (register only), and password on `AuthPage`.
-2. Frontend calls `POST /api/auth/signin` or `/api/auth/register`.
-3. **Registration:** Server creates user (unverified), generates 6-digit code, sends via Brevo email, returns `{ needsVerification: true, userId, email }`.
-4. **Sign In:** If user is unverified, server generates and sends new code, returns `{ needsVerification: true }`.
+2. Frontend calls `POST /api/auth/signin` or `/api/auth/register`. All auth endpoints are behind IP rate limiter (10 requests per 5 min via Upstash Redis).
+3. **Registration:** Server creates user (unverified), generates 6-digit code, sends via Brevo email, returns `{ needsVerification: true, userId, email }`. Email sends rate-limited to 1 per 5 min via `lastCodeSentAt` field.
+4. **Sign In:** If user is unverified, server checks email cooldown, then generates and sends new code. Failed login attempts tracked in Redis (5 max, 15min lockout on 5th failure). Success resets attempt counter.
 5. Frontend shows 6-digit OTP input. User enters code, calls `POST /api/auth/verify`.
 6. Server validates code, marks user as verified, returns JWT token containing userId, username, and role.
 7. Token is stored in localStorage via `src/api.ts` utility.
-8. App navigates to Dashboard. Token persists across sessions.
+8. App navigates to Dashboard (regular users) or AdminDashboard (admin users) based on role in JWT.
 
 ### User Roles
 - `regular` — default role for new registrations (after the first user).
@@ -79,7 +83,8 @@ Implemented as simple signal-based state management in `App.tsx`.
 ### Pages
 - `Landing.tsx`: Marketing entry page with scroll-reveal animations, scroll-driven OCTANE wordmark animation, and feature showcases. Inline nav becomes opaque on scroll. OCTANE wordmark lives in the fixed navbar header (absolutely positioned, `translateX(-50%)` centered) and uses signal-driven inline styles (`translateY`, `font-size`, `line-height`, `letter-spacing`) to animate from the hero content position to the navbar center as the user scrolls. No CSS `transform: scale()` is used — transitions are done purely via font-size interpolation.
 - `AuthPage.tsx`: Secure authentication interface for operator access.
-- `Dashboard.tsx`: Main telemetry overview with regional benchmarks and market trends.
+- `Dashboard.tsx`: Main telemetry overview with regional benchmarks and market trends (regular users).
+- `AdminDashboard.tsx`: Admin console with system stats, operator directory table, and audit trail access (admin users only).
 - `Watchlist.tsx`: User-saved stations feed with real-time pricing and distance.
 - `MapPage.tsx`: Interactive regional map with search and nearby units side-panel.
 - `Stations.tsx`: Detailed list of station terminals in a region with status and grade pricing.
