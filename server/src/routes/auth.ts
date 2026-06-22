@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import User from "../models/User.js";
 
 const router = Router();
@@ -29,7 +30,7 @@ router.post("/signin", async (req: Request, res: Response) => {
     }
 
     const token = jwt.sign(
-      { id: user._id, operatorId: user.operatorId },
+      { id: user._id, userId: user.userId, operatorId: user.operatorId, role: user.role },
       JWT_SECRET,
       { expiresIn: "24h" }
     );
@@ -37,7 +38,9 @@ router.post("/signin", async (req: Request, res: Response) => {
     res.json({
       message: "Authorization granted.",
       token,
+      userId: user.userId,
       operatorId: user.operatorId,
+      role: user.role,
     });
   } catch (error) {
     console.error("Sign-in error:", error);
@@ -61,15 +64,21 @@ router.post("/register", async (req: Request, res: Response) => {
       return;
     }
 
+    const userId = "USR-" + crypto.randomBytes(4).toString("hex").toUpperCase();
+    const userCount = await User.countDocuments();
+    const role = userCount === 0 ? "admin" : "regular";
+
     const user = new User({
+      userId,
       operatorId: operatorId.toUpperCase().trim(),
       password,
+      role,
     });
 
     await user.save();
 
     const token = jwt.sign(
-      { id: user._id, operatorId: user.operatorId },
+      { id: user._id, userId: user.userId, operatorId: user.operatorId, role: user.role },
       JWT_SECRET,
       { expiresIn: "24h" }
     );
@@ -77,7 +86,9 @@ router.post("/register", async (req: Request, res: Response) => {
     res.status(201).json({
       message: "Operator registered.",
       token,
+      userId: user.userId,
       operatorId: user.operatorId,
+      role: user.role,
     });
   } catch (error) {
     console.error("Registration error:", error);
