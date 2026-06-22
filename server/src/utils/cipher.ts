@@ -5,7 +5,7 @@ const IV_LENGTH = 12;
 const TAG_LENGTH = 16;
 
 function getKey(): Buffer {
-  const secret = process.env.JWT_SECRET || "fallback-secret";
+  const secret = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || "fallback-secret";
   return crypto.createHash("sha256").update(secret).digest();
 }
 
