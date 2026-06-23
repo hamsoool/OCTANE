@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
 import authRoutes from "./routes/auth.js";
+import stationsRoutes from "./routes/stations.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -28,6 +29,7 @@ app.get("/", (_req, res) => {
   res.redirect("/api/health");
 });
 app.use("/api/auth", authRoutes);
+app.use("/api/stations", stationsRoutes);
 
 // Health check
 app.get("/api/health", (_req, res) => {

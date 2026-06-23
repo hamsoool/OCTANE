@@ -26,38 +26,6 @@ const initialStations: Station[] = [
   { id: "esso", name: "ESSO_SYNERGY", price: "1.829", dist: "3.1 KM", status: "OPERATIONAL", coordinates: [120.2602, 14.8506] },
 ];
 
-const cleanStationName = (rawName?: string, rawBrand?: string): string => {
-  const name = rawName || rawBrand || "UNNAMED_UNIT";
-  return name.trim().toUpperCase().replace(/[\s\-]+/g, "_");
-};
-
-const getSeededPrice = (osmId: number, brand?: string): string => {
-  const base = 1.70;
-  const hash = (osmId * 2654435761) % 1000;
-  const offset = (hash / 1000) * 0.35;
-  
-  let brandBonus = 0;
-  if (brand) {
-    const b = brand.toLowerCase();
-    if (b.includes("shell") || b.includes("caltex")) {
-      brandBonus = 0.05;
-    } else if (b.includes("petron") || b.includes("seaoil") || b.includes("total")) {
-      brandBonus = 0.02;
-    } else if (b.includes("flying v") || b.includes("uno") || b.includes("jetti") || b.includes("phoenix")) {
-      brandBonus = -0.03;
-    }
-  }
-
-  const price = base + offset + brandBonus;
-  return price.toFixed(3);
-};
-
-const getSeededStatus = (osmId: number): string => {
-  const hash = (osmId * 123456789) % 100;
-  if (hash < 10) return "MAINTENANCE";
-  if (hash < 30) return "PEAK_HOURS";
-  return "OPERATIONAL";
-};
 
 const MapPage: Component = () => {
   let mapContainer: HTMLDivElement | undefined;
@@ -114,55 +82,23 @@ const MapPage: Component = () => {
   };
 
   const fetchOverpassStations = async (): Promise<Station[]> => {
-    const query = `[out:json][timeout:25];
-(
-  area["name"="Zambales"];
-  area["name"="Olongapo"];
-)->.searchAreas;
-(
-  node["amenity"="fuel"](area.searchAreas);
-  way["amenity"="fuel"](area.searchAreas);
-  relation["amenity"="fuel"](area.searchAreas);
-);
-out center;`;
-
+    const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
     try {
-      const response = await fetch("https://overpass-api.de/api/interpreter", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "User-Agent": "octane-fuel-price-intelligence-client"
-        },
-        body: "data=" + encodeURIComponent(query)
-      });
+      const response = await fetch(`${API_BASE}/stations`);
 
       if (!response.ok) {
         throw new Error(`HTTP error ${response.status}`);
       }
 
       const data = await response.json();
-      if (!data.elements) return [];
-
-      return data.elements.map((el: any) => {
-        const lat = el.lat ?? el.center?.lat;
-        const lon = el.lon ?? el.center?.lon;
-        const name = cleanStationName(el.tags?.name, el.tags?.brand);
-        return {
-          id: el.id.toString(),
-          name,
-          price: getSeededPrice(el.id, el.tags?.brand || el.tags?.name),
-          status: getSeededStatus(el.id),
-          coordinates: [lon, lat] as [number, number]
-        };
-      }).filter((s: Station) => !isNaN(s.coordinates[0]) && !isNaN(s.coordinates[1]));
+      return data;
     } catch (error) {
-      console.error("Failed to fetch Overpass fuel stations:", error);
+      console.error("Failed to fetch fuel stations from backend:", error);
       return [];
     }
   };
 
   let markers: maplibregl.Marker[] = [];
-  let tempSearchMarker: maplibregl.Marker | null = null;
   let debounceTimer: number | null = null;
   const cache = new Map<string, any[]>();
 
@@ -331,9 +267,6 @@ out center;`;
     if (currentMap) {
       currentMap.remove();
     }
-    if (tempSearchMarker) {
-      tempSearchMarker.remove();
-    }
     if (debounceTimer) {
       clearTimeout(debounceTimer);
     }
@@ -489,9 +422,6 @@ out center;`;
     const currentMap = map();
     if (!currentMap) return;
 
-    if (tempSearchMarker) {
-      tempSearchMarker.remove();
-    }
     updateSyncTime();
 
     currentMap.flyTo({
