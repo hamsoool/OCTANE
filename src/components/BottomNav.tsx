@@ -1,50 +1,38 @@
+import { A } from "@solidjs/router";
 import type { Component } from "solid-js";
 import { getRole } from "../api";
 
-type Page = "dashboard" | "admin-dashboard" | "watchlist" | "map" | "stations";
-
-interface BottomNavProps {
-  current: Page;
-  onNavigate: (page: Page) => void;
-}
-
-const regularItems: { page: Page; icon: string; label: string }[] = [
-  { page: "dashboard", icon: "dashboard", label: "DASHBOARD" },
-  { page: "watchlist", icon: "star", label: "WATCHLIST" },
-  { page: "map", icon: "map", label: "MAP" },
-  { page: "stations", icon: "ev_station", label: "STATIONS" },
+const regularItems: { href: string; icon: string; label: string }[] = [
+  { href: "/dashboard", icon: "dashboard", label: "DASHBOARD" },
+  { href: "/watchlist", icon: "star", label: "WATCHLIST" },
+  { href: "/map", icon: "map", label: "MAP" },
+  { href: "/stations", icon: "ev_station", label: "STATIONS" },
 ];
 
-const adminItems: { page: Page; icon: string; label: string }[] = [
-  { page: "admin-dashboard", icon: "admin_panel_settings", label: "ADMIN" },
-  { page: "watchlist", icon: "star", label: "WATCHLIST" },
-  { page: "map", icon: "map", label: "MAP" },
-  { page: "stations", icon: "ev_station", label: "STATIONS" },
+const adminItems: { href: string; icon: string; label: string }[] = [
+  { href: "/admin", icon: "admin_panel_settings", label: "ADMIN" },
+  { href: "/watchlist", icon: "star", label: "WATCHLIST" },
+  { href: "/map", icon: "map", label: "MAP" },
+  { href: "/stations", icon: "ev_station", label: "STATIONS" },
 ];
 
-const BottomNav: Component<BottomNavProps> = (props) => {
+const BottomNav: Component = () => {
   const isAdmin = getRole() === "admin";
   const items = isAdmin ? adminItems : regularItems;
 
   return (
     <nav class="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-xl bg-surface px-4 border-t border-hairline">
       {items.map((item) => (
-        <button
-          onClick={() => props.onNavigate(item.page)}
-          classList={{
-            "flex flex-col items-center justify-center transition-opacity": true,
-            "text-primary": props.current === item.page,
-            "text-on-surface-variant hover:text-primary": props.current !== item.page,
-          }}
+        <A
+          href={item.href}
+          class="flex flex-col items-center justify-center transition-opacity"
+          activeClass="text-primary"
+          inactiveClass="text-on-surface-variant hover:text-primary"
+          end
         >
-          <span
-            class="material-symbols-outlined mb-1"
-            style={props.current === item.page ? { "font-variation-settings": "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24" } : {}}
-          >
-            {item.icon}
-          </span>
+          <span class="material-symbols-outlined mb-1">{item.icon}</span>
           <span class="font-label-sm text-label-sm uppercase tracking-[2.5px]">{item.label}</span>
-        </button>
+        </A>
       ))}
     </nav>
   );

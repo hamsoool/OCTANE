@@ -1,29 +1,23 @@
 import { createSignal, onMount, onCleanup, type Component } from "solid-js";
+import { useNavigate, A } from "@solidjs/router";
 import { getUsername, getRole, clearToken } from "../api";
 
-type Page = "dashboard" | "admin-dashboard" | "watchlist" | "map" | "stations";
-
-interface TopNavProps {
-  current: Page;
-  onNavigate: (page: Page) => void;
-  onLogout: () => void;
-}
-
-const baseNavItems: { page: Page; label: string }[] = [
-  { page: "dashboard", label: "DASHBOARD" },
-  { page: "watchlist", label: "WATCHLIST" },
-  { page: "map", label: "MAP" },
-  { page: "stations", label: "STATIONS" },
+const baseNavItems: { href: string; label: string; match: string }[] = [
+  { href: "/dashboard", label: "DASHBOARD", match: "dashboard" },
+  { href: "/watchlist", label: "WATCHLIST", match: "watchlist" },
+  { href: "/map", label: "MAP", match: "map" },
+  { href: "/stations", label: "STATIONS", match: "stations" },
 ];
 
-const adminNavItems: { page: Page; label: string }[] = [
-  { page: "admin-dashboard", label: "ADMIN" },
-  { page: "watchlist", label: "WATCHLIST" },
-  { page: "map", label: "MAP" },
-  { page: "stations", label: "STATIONS" },
+const adminNavItems: { href: string; label: string; match: string }[] = [
+  { href: "/admin", label: "ADMIN", match: "admin" },
+  { href: "/watchlist", label: "WATCHLIST", match: "watchlist" },
+  { href: "/map", label: "MAP", match: "map" },
+  { href: "/stations", label: "STATIONS", match: "stations" },
 ];
 
-const TopNav: Component<TopNavProps> = (props) => {
+const TopNav: Component = () => {
+  const navigate = useNavigate();
   const [scrolled, setScrolled] = createSignal(false);
   const [menuOpen, setMenuOpen] = createSignal(false);
   let menuRef: HTMLDivElement | undefined;
@@ -49,7 +43,7 @@ const TopNav: Component<TopNavProps> = (props) => {
   const handleLogout = () => {
     setMenuOpen(false);
     clearToken();
-    props.onLogout();
+    navigate("/", { replace: true });
   };
 
   const currentUsername = getUsername();
@@ -66,16 +60,15 @@ const TopNav: Component<TopNavProps> = (props) => {
     >
       <nav class="hidden md:flex gap-lg h-full items-center">
         {navItems.map((item) => (
-          <button
-            onClick={() => props.onNavigate(item.page)}
-            classList={{
-              "font-label-md text-label-md uppercase h-full flex items-center px-2 transition-colors": true,
-              "text-primary border-b-2 border-primary": props.current === item.page,
-              "text-on-surface-variant hover:text-primary": props.current !== item.page,
-            }}
+          <A
+            href={item.href}
+            class="font-label-md text-label-md uppercase h-full flex items-center px-2 transition-colors"
+            activeClass="text-primary border-b-2 border-primary"
+            inactiveClass="text-on-surface-variant hover:text-primary"
+            end
           >
             {item.label}
-          </button>
+          </A>
         ))}
       </nav>
       <div ref={menuRef} class="relative md:absolute md:right-container-margin md:top-1/2 md:-translate-y-1/2">

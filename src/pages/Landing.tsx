@@ -1,16 +1,22 @@
 import { createSignal, onMount, type Component } from "solid-js";
+import { useNavigate } from "@solidjs/router";
+import { getToken } from "../api";
 
-interface LandingProps {
-  onEnter: () => void;
-}
-
-const Landing: Component<LandingProps> = (props) => {
+const Landing: Component = () => {
+  const navigate = useNavigate();
   const [scrollY, setScrollY] = createSignal(0);
   let placeholderRef: HTMLDivElement | undefined;
   const [octOffset, setOctOffset] = createSignal(300);
   const octProgress = () => Math.min(scrollY() / octOffset(), 1);
 
   onMount(() => {
+    const token = getToken();
+    if (token) {
+      const role = localStorage.getItem("role");
+      navigate(role === "admin" ? "/admin" : "/dashboard", { replace: true });
+      return;
+    }
+
     const handleScroll = () => setScrollY(window.scrollY);
     window.addEventListener("scroll", handleScroll, { passive: true });
 
@@ -85,7 +91,7 @@ const Landing: Component<LandingProps> = (props) => {
           OCTANE
         </div>
         <button
-          onClick={props.onEnter}
+          onClick={() => navigate("/auth")}
           class="font-label-md text-label-md uppercase tracking-[2.5px] hover:opacity-60 transition-opacity"
         >
           SIGN IN
@@ -120,7 +126,7 @@ const Landing: Component<LandingProps> = (props) => {
               EXPLORE THE SYSTEM
             </button>
             <button
-              onClick={props.onEnter}
+              onClick={() => navigate("/auth")}
               class="border border-primary px-lg py-sm font-label-md text-label-md text-primary uppercase tracking-[2.5px] rounded-full hover:bg-primary hover:text-black transition-all duration-300 active:scale-95"
             >
               SIGN IN
@@ -249,7 +255,7 @@ const Landing: Component<LandingProps> = (props) => {
           </h2>
           <div class="reveal">
             <button
-              onClick={props.onEnter}
+              onClick={() => navigate("/auth")}
               class="border border-primary px-lg py-sm font-label-md text-label-md text-primary uppercase tracking-[2.5px] rounded-full hover:bg-primary hover:text-black transition-all duration-300 active:scale-95"
             >
               SIGN IN
@@ -264,19 +270,19 @@ const Landing: Component<LandingProps> = (props) => {
           <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-md">
             <div class="flex flex-col gap-xs">
               <button
-                onClick={props.onEnter}
+                onClick={() => navigate("/auth")}
                 class="font-label-md text-label-md text-text-muted hover:text-white transition-colors text-left"
               >
                 WATCHLIST
               </button>
               <button
-                onClick={props.onEnter}
+                onClick={() => navigate("/auth")}
                 class="font-label-md text-label-md text-text-muted hover:text-white transition-colors text-left"
               >
                 STATIONS
               </button>
               <button
-                onClick={props.onEnter}
+                onClick={() => navigate("/auth")}
                 class="font-label-md text-label-md text-text-muted hover:text-white transition-colors text-left"
               >
                 INTELLIGENCE
@@ -285,7 +291,7 @@ const Landing: Component<LandingProps> = (props) => {
             <div class="flex flex-col gap-xs md:text-right">
               <span class="font-label-md text-label-md text-text-muted">LEGAL/TERMS</span>
               <span class="font-label-md text-label-md text-text-muted">PRIVACY POLICY</span>
-              <span class="font-label-md text-label-md text-text-muted">© 2024 OCTANE GLOBAL</span>
+              <span class="font-label-md text-label-md text-text-muted">© {new Date().getFullYear()} OCTANE GLOBAL</span>
             </div>
           </div>
           <div class="pt-xl flex justify-center border-t border-hairline overflow-hidden">

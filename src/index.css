@@ -143,3 +143,25 @@
     caret-color: #ffffff;
   }
 }
+
+/* Custom MapLibre Popup & Filter Overrides for Machined Precision Theme */
+.filter-monochrome-dark .maplibregl-canvas {
+  filter: invert(90%) hue-rotate(180deg) brightness(85%) contrast(110%) grayscale(100%);
+}
+
+.custom-telemetry-popup .maplibregl-popup-content {
+  background: #131313 !important;
+  color: #ffffff !important;
+  border: 1px solid #262626 !important;
+  border-radius: 0px !important;
+  box-shadow: none !important;
+  padding: 8px 12px !important;
+}
+
+.custom-telemetry-popup .maplibregl-popup-tip {
+  border-top-color: #262626 !important;
+  border-bottom-color: #262626 !important;
+  border-left-color: #262626 !important;
+  border-right-color: #262626 !important;
+}
+

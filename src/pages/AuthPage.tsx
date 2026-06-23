@@ -1,12 +1,14 @@
 import { createSignal, createEffect, onCleanup, type Component } from "solid-js";
-import { apiPost, setToken } from "../api";
+import { useNavigate } from "@solidjs/router";
+import { Navigate } from "@solidjs/router";
+import { apiPost, setToken, getRole, getToken } from "../api";
 
-interface AuthPageProps {
-  onBack: () => void;
-  onSignIn: () => void;
-}
-
-const AuthPage: Component<AuthPageProps> = (props) => {
+const AuthPage: Component = () => {
+  const navigate = useNavigate();
+  const token = getToken();
+  if (token) {
+    return <Navigate href={getRole() === "admin" ? "/admin" : "/dashboard"} />;
+  }
   const [username, setUsername] = createSignal("");
   const [email, setEmail] = createSignal("");
   const [password, setPassword] = createSignal("");
@@ -118,7 +120,7 @@ const AuthPage: Component<AuthPageProps> = (props) => {
       setIsLoading(false);
       if (result.success && result.data) {
         setToken(result.data.token);
-        props.onSignIn();
+        navigate(getRole() === "admin" ? "/admin" : "/dashboard", { replace: true });
       } else {
         setError(result.error || "Verification failed.");
       }
@@ -179,7 +181,7 @@ const AuthPage: Component<AuthPageProps> = (props) => {
         setOtp(["", "", "", "", "", ""]);
       } else if (result.data.token) {
         setToken(result.data.token);
-        props.onSignIn();
+        navigate(getRole() === "admin" ? "/admin" : "/dashboard", { replace: true });
       }
     } else {
       setError(result.error || "Operation failed.");
@@ -233,7 +235,7 @@ const AuthPage: Component<AuthPageProps> = (props) => {
               setPendingVerification(false);
               setError("");
             } else {
-              props.onBack();
+              navigate("/", { replace: true });
             }
           }}
           class="absolute top-lg left-lg text-primary hover:text-white transition-colors flex items-center justify-center hover:bg-white/5 z-20"
@@ -451,7 +453,7 @@ const AuthPage: Component<AuthPageProps> = (props) => {
                 </button>
                 <button
                   type="button"
-                  onClick={props.onBack}
+                  onClick={() => navigate("/", { replace: true })}
                   class="w-full font-label-sm text-label-sm text-text-muted uppercase tracking-[2px] hover:text-primary transition-colors"
                 >
                   Cancel

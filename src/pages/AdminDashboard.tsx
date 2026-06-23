@@ -1,5 +1,6 @@
 import { createSignal, onMount, type Component } from "solid-js";
-import { getUsername } from "../api";
+import { Navigate } from "@solidjs/router";
+import { getUsername, getRole } from "../api";
 
 interface StatsCardProps {
   label: string;
@@ -14,6 +15,9 @@ const StatsCard: Component<StatsCardProps> = (props) => (
 );
 
 const AdminDashboard: Component = () => {
+  const role = getRole();
+  if (role !== "admin") return <Navigate href="/dashboard" />;
+
   const [greeting, setGreeting] = createSignal("");
 
   onMount(() => {

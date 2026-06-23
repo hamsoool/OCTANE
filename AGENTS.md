@@ -20,6 +20,7 @@ This document serves as the primary source of truth for any AI agent working on 
 - **Database:** MongoDB Atlas via Mongoose (v8.24)
 - **Auth:** bcryptjs (password hashing) + jsonwebtoken (JWT)
 - **Rate Limiting:** Upstash Redis (@upstash/redis v1.38) — IP rate limit (10/5min) + login attempt lockout (5 strikes, 15min lock)
+- **Map Stack:** MapLibre GL JS (v5.24.0) with OpenFreeMap vector tiles (Liberty style + CSS monochrome-dark filter) and Nominatim geocoding API
 - **Font Stack:**
     - Display: Anybody (uppercase, wide tracking)
     - Body: Source Serif 4 (serif, sentence case)
@@ -39,9 +40,11 @@ This document serves as the primary source of truth for any AI agent working on 
 
 ## 4. Application Architecture
 ### Frontend Routing
-Implemented as simple signal-based state management in `App.tsx`.
-- `currentPage` signal determines which page component is rendered.
-- `setCurrentPage` is passed to `TopNav` and `BottomNav` for navigation.
+Uses `@solidjs/router` (v0.16) with nested route definitions in `App.tsx`.
+- `Router` wraps the app, `Route` defines paths and components.
+- `AppLayout` wraps authenticated pages (TopNav + `<main>` + BottomNav) and redirects to `/auth` if no token.
+- Landing (`/`) and AuthPage (`/auth`) are public; all other routes are protected.
+- `AdminDashboard` additionally guards against non-admin users. No `currentPage` signal — routing is URL-driven.
 
 ### Backend (server/)
 - Express.js server at `server/src/index.ts` on port 3001.
@@ -86,7 +89,7 @@ Implemented as simple signal-based state management in `App.tsx`.
 - `Dashboard.tsx`: Main telemetry overview with regional benchmarks and market trends (regular users).
 - `AdminDashboard.tsx`: Admin console with system stats, operator directory table, and audit trail access (admin users only).
 - `Watchlist.tsx`: User-saved stations feed with real-time pricing and distance.
-- `MapPage.tsx`: Interactive regional map with search and nearby units side-panel.
+- `MapPage.tsx`: Interactive regional map with search and nearby units side-panel. Integrated with MapLibre GL JS, OpenFreeMap (Liberty style with monochrome-dark canvas filter), and Nominatim geocoding API. Features debounced searching, coordinate/text cache lookup, live telemetry status reports, dynamic distance calculation using the Haversine formula, dynamic list sorting, mobile collapsible side drawing drawer, reactive DOM marker highlights, a live-updating telemetric sync clock displaying the current date-time, and click-to-view synchronous telemetry popups with custom styling.
 - `Stations.tsx`: Detailed list of station terminals in a region with status and grade pricing.
 
 ### Components
