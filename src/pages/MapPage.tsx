@@ -3,10 +3,19 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { MAP_THEMES, applyThemeStyle, toggleMapLayerVisibility } from "../constants/mapThemes";
 
+interface FuelData {
+  diesel?: string;
+  ron91?: string;
+  ron95?: string;
+  ron97?: string;
+}
+
 interface Station {
   id: string;
   name: string;
   price: string;
+  priceGrade?: string;
+  fuelData?: FuelData;
   dist: string;
   status: string;
   coordinates: [number, number]; // [lng, lat]
@@ -215,15 +224,30 @@ const MapPage: Component = () => {
         <div class="font-label-sm text-[10px] text-primary uppercase">
           <div class="font-headline-md text-xs border-b border-hairline pb-xs mb-xs">${station.name}</div>
           <div class="flex justify-between gap-md mb-xs">
-            <span class="text-text-muted">PRICE:</span>
-            <span class="text-primary font-data-lg text-sm">${station.price}9</span>
+            <span class="text-text-muted">PRICE (${station.priceGrade ?? "RON_91"}):</span>
+            <span class="text-primary font-data-lg text-sm">${station.price}</span>
           </div>
+          ${station.fuelData ? `
+          <div class="flex justify-between gap-md mb-xs text-[9px]">
+            <span class="text-text-muted">DIESEL:</span>
+            <span class="text-primary">${station.fuelData.diesel ?? "—"}</span>
+          </div>
+          <div class="flex justify-between gap-md mb-xs text-[9px]">
+            <span class="text-text-muted">RON 91:</span>
+            <span class="text-primary">${station.fuelData.ron91 ?? "—"}</span>
+          </div>
+          <div class="flex justify-between gap-md mb-xs text-[9px]">
+            <span class="text-text-muted">RON 95:</span>
+            <span class="text-primary">${station.fuelData.ron95 ?? "—"}</span>
+          </div>
+          ` : ""}
           <div class="flex justify-between gap-md">
             <span class="text-text-muted">STATUS:</span>
             <span class="text-ice-blue">${station.status}</span>
           </div>
         </div>
       `);
+
 
       const marker = new maplibregl.Marker({ element: el })
         .setLngLat(station.coordinates)
@@ -587,6 +611,8 @@ const MapPage: Component = () => {
                 <MapResult
                   name={station.name}
                   price={station.price}
+                  priceGrade={(station as any).priceGrade}
+                  fuelData={(station as any).fuelData}
                   dist={station.dist}
                   status={station.status}
                   selected={selectedStationId() === station.id}
@@ -720,6 +746,8 @@ const MapPage: Component = () => {
 interface MapResultProps {
   name: string;
   price: string;
+  priceGrade?: string;
+  fuelData?: FuelData;
   dist: string;
   status: string;
   selected?: boolean;
@@ -737,9 +765,14 @@ const MapResult: Component<MapResultProps> = (props) => {
     >
       <div class="flex justify-between items-start mb-sm">
         <h3 class="font-headline-md text-headline-md leading-none">{props.name}</h3>
-        <span class="font-data-lg text-data-lg text-primary">
-          {props.price}<span class="text-[10px] align-top">9</span>
-        </span>
+        <div class="text-right">
+          <span class="font-data-lg text-data-lg text-primary">
+            {props.price}
+          </span>
+          <div class="font-label-sm text-[9px] text-ice-blue uppercase tracking-[1px]">
+            {props.priceGrade ?? "RON_91"}
+          </div>
+        </div>
       </div>
       <div class="flex items-center gap-md">
         <div class="flex flex-col">
@@ -750,12 +783,37 @@ const MapResult: Component<MapResultProps> = (props) => {
           <span class="font-label-sm text-label-sm text-text-muted uppercase">PUMP_STATUS</span>
           <span class="font-label-md text-label-md text-primary">{props.status}</span>
         </div>
-        <div class="ml-auto">
-          <span class="material-symbols-outlined text-primary opacity-0 group-hover:opacity-100 transition-opacity">arrow_forward</span>
-        </div>
+        {props.fuelData && (
+          <div class="ml-auto flex flex-col items-end gap-[2px]">
+            {props.fuelData.diesel && (
+              <div class="flex gap-xs">
+                <span class="font-label-sm text-[8px] text-text-muted uppercase">DSL</span>
+                <span class="font-label-sm text-[8px] text-primary">{props.fuelData.diesel}</span>
+              </div>
+            )}
+            {props.fuelData.ron91 && (
+              <div class="flex gap-xs">
+                <span class="font-label-sm text-[8px] text-text-muted uppercase">R91</span>
+                <span class="font-label-sm text-[8px] text-primary">{props.fuelData.ron91}</span>
+              </div>
+            )}
+            {props.fuelData.ron95 && (
+              <div class="flex gap-xs">
+                <span class="font-label-sm text-[8px] text-text-muted uppercase">R95</span>
+                <span class="font-label-sm text-[8px] text-primary">{props.fuelData.ron95}</span>
+              </div>
+            )}
+          </div>
+        )}
+        {!props.fuelData && (
+          <div class="ml-auto">
+            <span class="material-symbols-outlined text-primary opacity-0 group-hover:opacity-100 transition-opacity">arrow_forward</span>
+          </div>
+        )}
       </div>
     </button>
   );
 };
+
 
 export default MapPage;

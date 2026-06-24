@@ -7,7 +7,7 @@ This document serves as the primary source of truth for any AI agent working on 
 ## 1. Project Overview
 **Project Name:** OCTANE
 **Purpose:** A high-end, region-based fuel price intelligence and watchlist application.
-**Current Status:** Prototype / Initial Frontend.
+**Current Status:** Prototype / Initial Frontend. Live DOE fuel prices integrated via soul-scraper API.
 **Aesthetic:** "Machined Precision" — austere, elite, clinical, monochrome. Inspired by automotive telemetry.
 
 ## 2. Tech Stack
@@ -51,6 +51,7 @@ Uses `@solidjs/router` (v0.16) with nested route definitions in `App.tsx`.
 - MongoDB connection via Mongoose using `MONGODB_URI` env variable.
 - JWT-based auth with tokens stored in localStorage on the client.
 - Rate limiting via Upstash Redis using `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` env vars.
+- **DOE Fuel Prices:** `server/src/utils/fuelPrices.ts` fetches live prices from the soul-scraper API (`DOE_API_URL` env var, default: `https://soul-scaper.onrender.com`). Parses North Luzon Pump Price PDFs and caches results for 6 hours. The preferred display grade is set via `DOE_PREFERRED_GRADE` (default: `ron91`).
 
 ### Project Structure
 - `src/App.tsx`: Main entry and routing shell.
@@ -62,10 +63,12 @@ Uses `@solidjs/router` (v0.16) with nested route definitions in `App.tsx`.
   - `server/src/index.ts`: Server entry point.
   - `server/src/models/User.ts`: Mongoose User model with bcrypt hashing, AES-256-GCM encrypted userId.
   - `server/src/routes/auth.ts`: Auth routes (POST /api/auth/signin, POST /api/auth/register, POST /api/auth/verify).
+  - `server/src/routes/stations.ts`: Overpass API fuel stations with live DOE prices. Fetches real prices from `fuelPrices.ts` and attaches `price`, `priceGrade`, and `fuelData` (diesel/ron91/ron95/ron97) to each station. Falls back to seeded pricing if DOE data is unavailable.
   - `server/src/middleware/auth.ts`: JWT authentication middleware.
   - `server/src/utils/cipher.ts`: AES-256-GCM encrypt/decrypt utility.
   - `server/src/utils/email.ts`: Brevo transactional email sender with 2FA code template.
   - `server/src/utils/redis.ts`: Upstash Redis client singleton.
+  - `server/src/utils/fuelPrices.ts`: DOE fuel price fetcher and parser. Calls soul-scraper API, parses North Luzon Pump Prices PDF text (common price column per grade), and caches results for 6 hours.
   - `server/src/middleware/rateLimit.ts`: IP rate limit middleware (10 requests per 5 min).
 
 ### Auth Flow
@@ -89,7 +92,7 @@ Uses `@solidjs/router` (v0.16) with nested route definitions in `App.tsx`.
 - `Dashboard.tsx`: Main telemetry overview with regional benchmarks and market trends (regular users).
 - `AdminDashboard.tsx`: Admin console with system stats, operator directory table, and audit trail access (admin users only).
 - `Watchlist.tsx`: User-saved stations feed with real-time pricing and distance.
-- `MapPage.tsx`: Interactive regional map with search and nearby units side-panel. Integrated with MapLibre GL JS, OpenFreeMap (Liberty style with monochrome-dark canvas filter), and Nominatim geocoding API. Features debounced searching, coordinate/text cache lookup, live telemetry status reports, dynamic distance calculation using the Haversine formula, dynamic list sorting, mobile collapsible side drawing drawer, reactive DOM marker highlights, a live-updating telemetric sync clock displaying the current date-time, and click-to-view synchronous telemetry popups with custom styling.
+- `MapPage.tsx`: Interactive regional map with search and nearby units side-panel. Integrated with MapLibre GL JS, OpenFreeMap (Liberty style with monochrome-dark canvas filter), and Nominatim geocoding API. Features debounced searching, coordinate/text cache lookup, live telemetry status reports, dynamic distance calculation using the Haversine formula, dynamic list sorting, mobile collapsible side drawing drawer, reactive DOM marker highlights, a live-updating telemetric sync clock displaying the current date-time, and click-to-view synchronous telemetry popups with custom styling. **Each station card now shows real DOE prices** (RON 91/95/97 + Diesel) sourced from the soul-scraper API, with a compact multi-grade breakdown (DSL/R91/R95) in the sidebar and grade-annotated prices in popups.
 - `Stations.tsx`: Detailed list of station terminals in a region with status and grade pricing.
 
 ### Components
