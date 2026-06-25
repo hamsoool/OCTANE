@@ -198,6 +198,8 @@ const MapPage: Component = () => {
   const [userLocationMode, setUserLocationMode] = createSignal<"gps" | "pin" | null>(null);
   const [isPinMode, setIsPinMode] = createSignal<boolean>(false);
   const [showRoute, setShowRoute] = createSignal<boolean>(false);
+  const [isFetchingRoute, setIsFetchingRoute] = createSignal<boolean>(false);
+  const [routeError, setRouteError] = createSignal<string | null>(null);
 
   // OSRM road distance cache
   const [roadDistances, setRoadDistances] = createSignal<Record<string, number>>({});
@@ -309,8 +311,6 @@ const MapPage: Component = () => {
     updateSyncTime();
 
     fetchOverpassStations();
-
-    document.addEventListener("click", handleRouteClick);
 
     if (!mapContainer) return;
 
@@ -427,6 +427,18 @@ const MapPage: Component = () => {
         </div>
       `);
 
+      // Attach route button click handler directly to popup element
+      // (document-level delegation fails because MapLibre popups intercept pointer events)
+      const popupEl = popup.getElement();
+      if (popupEl) {
+        popupEl.addEventListener("click", (e) => {
+          const target = e.target as HTMLElement;
+          if (target.closest("[data-route-btn]")) {
+            e.stopPropagation();
+            toggleRoute();
+          }
+        });
+      }
 
       const marker = new maplibregl.Marker({ element: el })
         .setLngLat(station.coordinates)
@@ -498,18 +510,22 @@ const MapPage: Component = () => {
 
     const cleanupRoute = () => {
       if (routeController) { routeController.abort(); routeController = null; }
-      if (currentMap?.getLayer("route-line")) currentMap.removeLayer("route-line");
-      if (currentMap?.getSource("route")) currentMap.removeSource("route");
+      const cm = map();
+      if (cm?.getLayer("route-line")) cm.removeLayer("route-line");
+      if (cm?.getSource("route")) cm.removeSource("route");
     };
 
     if (!shouldShow || !stationId || !origin || !currentMap) {
       cleanupRoute();
+      setIsFetchingRoute(false);
       return;
     }
 
     const station = allStations().find((s) => s.id === stationId);
-    if (!station) { cleanupRoute(); return; }
+    if (!station) { cleanupRoute(); setIsFetchingRoute(false); return; }
 
+    setIsFetchingRoute(true);
+    setRouteError(null);
     routeController = new AbortController();
     fetch(
       `https://router.project-osrm.org/route/v1/driving/${origin[0]},${origin[1]};${station.coordinates[0]},${station.coordinates[1]}?overview=full&geometries=geojson&steps=false`,
@@ -520,7 +536,11 @@ const MapPage: Component = () => {
     )
       .then((res) => res.json())
       .then((data) => {
-        if (data.code !== "Ok" || !data.routes?.[0]?.geometry) return;
+        if (data.code !== "Ok" || !data.routes?.[0]?.geometry) {
+          setRouteError("ROUTE_NOT_FOUND");
+          setIsFetchingRoute(false);
+          return;
+        }
         const cm = map();
         if (!cm) return;
         const geoJSON = { type: "Feature", properties: {}, geometry: data.routes[0].geometry };
@@ -541,16 +561,18 @@ const MapPage: Component = () => {
             },
           });
         }
+        setIsFetchingRoute(false);
       })
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
         console.error("Route fetch error:", err);
+        setRouteError("ROUTE_UNAVAILABLE");
+        setIsFetchingRoute(false);
       });
   });
 
   onCleanup(() => {
     if (routeController) { routeController.abort(); routeController = null; }
-    document.removeEventListener("click", handleRouteClick);
     const currentMap = map();
     if (currentMap) {
       currentMap.off("click", handleMapPinClick);
@@ -684,14 +706,9 @@ const MapPage: Component = () => {
     setRoadDistances({});
   };
 
-  const toggleRoute = () => setShowRoute((prev) => !prev);
-
-  const handleRouteClick = (e: MouseEvent) => {
-    const target = e.target as HTMLElement;
-    if (target.closest("[data-route-btn]")) {
-      e.stopPropagation();
-      toggleRoute();
-    }
+  const toggleRoute = () => {
+    setShowRoute((prev) => !prev);
+    setRouteError(null);
   };
 
   const performGeocoding = async (query: string): Promise<any[]> => {
@@ -922,6 +939,18 @@ const MapPage: Component = () => {
             <div class="flex items-center gap-xs mb-xs">
               <span class="material-symbols-outlined text-[14px] text-ice-blue animate-spin">sync</span>
               <span class="font-label-sm text-[9px] text-ice-blue uppercase tracking-[1px] animate-pulse">ROUTING...</span>
+            </div>
+          )}
+          {isFetchingRoute() && (
+            <div class="flex items-center gap-xs mb-xs">
+              <span class="material-symbols-outlined text-[14px] text-ice-blue animate-spin">route</span>
+              <span class="font-label-sm text-[9px] text-ice-blue uppercase tracking-[1px] animate-pulse">CALCULATING_ROUTE...</span>
+            </div>
+          )}
+          {routeError() && (
+            <div class="flex items-center gap-xs mb-xs">
+              <span class="material-symbols-outlined text-[14px] text-text-muted">error</span>
+              <span class="font-label-sm text-[9px] text-text-muted uppercase tracking-[1px]">{routeError()}</span>
             </div>
           )}
           <div class="bg-background border border-hairline p-sm flex items-center gap-xs">
