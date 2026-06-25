@@ -37,13 +37,6 @@ const getSeededPrice = (osmId: number, brand?: string): string => {
   return price.toFixed(3);
 };
 
-const getSeededStatus = (osmId: number): string => {
-  const hash = (osmId * 123456789) % 100;
-  if (hash < 10) return "MAINTENANCE";
-  if (hash < 30) return "PEAK_HOURS";
-  return "OPERATIONAL";
-};
-
 router.get("/", async (req, res) => {
   const now = Date.now();
 
@@ -85,7 +78,6 @@ out center;`;
             id: el.id.toString(),
             name,
             brand: (el.tags?.brand || el.tags?.name || "").toLowerCase(),
-            status: getSeededStatus(el.id),
             coordinates: [lon, lat]
           };
         }).filter((s: any) => !isNaN(s.coordinates[0]) && !isNaN(s.coordinates[1]));
@@ -117,6 +109,8 @@ out center;`;
     return {
       id: s.id,
       name: s.name,
+      brand: s.brand,
+      preferredGrade,
       price: primaryPrice,
       priceGrade: gradeLabel,
       fuelData: {
@@ -125,7 +119,6 @@ out center;`;
         ron95: fuelPrices.ron95,
         ron97: fuelPrices.ron97,
       },
-      status: s.status,
       coordinates: s.coordinates,
     };
   });

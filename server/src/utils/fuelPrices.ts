@@ -25,6 +25,27 @@ let cache: CacheEntry | null = null;
 
 const DOE_API_URL =
   process.env.DOE_API_URL ?? "https://soul-scaper.onrender.com";
+const DOE_API_KEY = process.env.DOE_API_KEY ?? "";
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  retries = 3,
+  baseDelayMs = 1000
+): Promise<Response> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      if (response.ok || attempt >= retries) return response;
+      console.warn(`[fuelPrices] Fetch attempt ${attempt}/${retries} failed (${response.status}), retrying...`);
+      await new Promise(r => setTimeout(r, Math.pow(2, attempt - 1) * baseDelayMs));
+    } catch (err) {
+      if (attempt >= retries) throw err;
+      console.warn(`[fuelPrices] Fetch attempt ${attempt}/${retries} error, retrying...`);
+      await new Promise(r => setTimeout(r, Math.pow(2, attempt - 1) * baseDelayMs));
+    }
+  }
+}
 
 // Looks for the last valid float in a sequence of newline-separated tokens
 // following a given fuel grade header line. The DOE PDF text puts the COMMON PRICE
@@ -140,9 +161,9 @@ export async function getFuelPrices(): Promise<FuelGradePrices> {
   }
 
   try {
-    const listRes = await fetch(
+    const listRes = await fetchWithRetry(
       `${DOE_API_URL}/documents?category=North%20Luzon%20Pump%20Prices&limit=20`,
-      { signal: AbortSignal.timeout(15000) }
+      { signal: AbortSignal.timeout(15000), headers: { "X-API-Key": DOE_API_KEY } }
     );
 
     if (!listRes.ok) {
@@ -153,9 +174,10 @@ export async function getFuelPrices(): Promise<FuelGradePrices> {
 
     for (const doc of docs) {
       try {
-        const detailRes = await fetch(`${DOE_API_URL}/documents/${doc.id}`, {
+        const detailRes = await fetchWithRetry(`${DOE_API_URL}/documents/${doc.id}`, {
           signal: AbortSignal.timeout(15000),
-        });
+          headers: { "X-API-Key": DOE_API_KEY },
+        }, 2);
         if (!detailRes.ok) continue;
 
         const detail: { content?: string } = await detailRes.json();

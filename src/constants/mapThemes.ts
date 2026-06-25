@@ -5,6 +5,10 @@ export const MAP_THEMES = {
     id: "DEFAULT",
     name: "DEFAULT",
     filterClass: "filter-monochrome-dark",
+    colors: {
+      marker: "#e0e0e0",
+      markerSelected: "#c3d9f3",
+    },
   },
   NOIR: {
     id: "NOIR",
@@ -21,6 +25,8 @@ export const MAP_THEMES = {
       label: "#e5e5e5",
       landuse: "#050505",
       accent: "#c3d9f3",
+      marker: "#e5e5e5",
+      markerSelected: "#c3d9f3",
     },
   },
 };
