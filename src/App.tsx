@@ -1,13 +1,15 @@
+import { lazy, type Component } from "solid-js";
 import { Router, Route } from "@solidjs/router";
-import type { Component } from "solid-js";
 import AppLayout from "./components/AppLayout";
 import Landing from "./pages/Landing";
 import AuthPage from "./pages/AuthPage";
 import Dashboard from "./pages/Dashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import Watchlist from "./pages/Watchlist";
-import MapPage from "./pages/MapPage";
 import Stations from "./pages/Stations";
+import CookieConsent from "./components/CookieConsent";
+
+const MapPage = lazy(() => import("./pages/MapPage"));
 
 const App: Component = () => {
   return (
@@ -29,6 +31,7 @@ const App: Component = () => {
       <Route path="/stations" component={AppLayout}>
         <Route path="/" component={Stations} />
       </Route>
+      <CookieConsent />
     </Router>
   );
 };

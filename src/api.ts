@@ -1,14 +1,19 @@
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
+const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
-interface ApiResponse<T = unknown> {
-  success: boolean;
-  data?: T;
-  error?: string;
+let currentToken: string | null = null;
+let currentUser: { username: string; role: string } | null = null;
+
+function fetchOpts(extra?: Record<string, unknown>): RequestInit {
+  return {
+    credentials: "include",
+    ...extra,
+  };
 }
 
-export async function apiPost<T>(endpoint: string, body: Record<string, unknown>): Promise<ApiResponse<T>> {
+export async function apiPost<T>(endpoint: string, body: Record<string, unknown>): Promise<{ success: boolean; data?: T; error?: string }> {
   try {
     const res = await fetch(`${API_BASE}${endpoint}`, {
+      ...fetchOpts(),
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -23,42 +28,52 @@ export async function apiPost<T>(endpoint: string, body: Record<string, unknown>
   }
 }
 
-export function getToken(): string | null {
-  return localStorage.getItem("octane_token");
+export async function apiGet<T>(endpoint: string): Promise<{ success: boolean; data?: T; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}${endpoint}`, fetchOpts());
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.message || "Request failed." };
+    }
+    return { success: true, data };
+  } catch {
+    return { success: false, error: "Unable to reach the system. Check your connection." };
+  }
 }
 
-export function setToken(token: string): void {
-  localStorage.setItem("octane_token", token);
+export function setToken(token: string, username: string, role: string): void {
+  currentToken = token;
+  currentUser = { username, role };
 }
 
 export function clearToken(): void {
-  localStorage.removeItem("octane_token");
+  currentToken = null;
+  currentUser = null;
+}
+
+export function getToken(): string | null {
+  return currentToken;
 }
 
 export function isAuthenticated(): boolean {
-  return !!getToken();
+  return currentToken !== null;
 }
 
 export function getUsername(): string | null {
-  const token = getToken();
-  if (!token) return null;
-  try {
-    const payload = token.split(".")[1];
-    const decoded = JSON.parse(atob(payload));
-    return decoded.username || null;
-  } catch {
-    return null;
-  }
+  return currentUser?.username ?? null;
 }
 
 export function getRole(): string | null {
-  const token = getToken();
-  if (!token) return null;
-  try {
-    const payload = token.split(".")[1];
-    const decoded = JSON.parse(atob(payload));
-    return decoded.role || null;
-  } catch {
-    return null;
+  return currentUser?.role ?? null;
+}
+
+export async function checkSession(): Promise<boolean> {
+  const res = await apiGet<{ userId: string; username: string; role: string }>("/auth/me");
+  if (res.success && res.data) {
+    currentUser = { username: res.data.username, role: res.data.role };
+    currentToken = "session";
+    return true;
   }
+  clearToken();
+  return false;
 }

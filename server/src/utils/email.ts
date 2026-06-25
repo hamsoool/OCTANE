@@ -23,7 +23,7 @@ export async function sendVerificationCode({ to, username, code }: SendVerificat
     body { background: #000000; font-family: 'JetBrains Mono', monospace; }
     .container { max-width: 480px; margin: 0 auto; padding: 40px 24px; background: #131313; border: 1px solid #262626; }
     .header { text-align: center; margin-bottom: 32px; }
-    .header h1 { font-family: 'Anybody', sans-serif; font-size: 24px; font-weight: 400; color: #ffffff; text-transform: uppercase; letter-spacing: 4px; }
+    .header h1 { font-family: 'Azonix', sans-serif; font-size: 24px; font-weight: 400; color: #ffffff; text-transform: uppercase; letter-spacing: 4px; }
     .header p { font-family: 'Source Serif 4', serif; font-size: 14px; color: #999999; margin-top: 8px; }
     .divider { height: 1px; background: #262626; margin: 24px 0; }
     .code-container { text-align: center; padding: 24px 0; }

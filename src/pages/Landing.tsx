@@ -1,6 +1,6 @@
 import { createSignal, onMount, type Component } from "solid-js";
 import { useNavigate } from "@solidjs/router";
-import { getToken } from "../api";
+import { checkSession, getRole, isAuthenticated } from "../api";
 
 const Landing: Component = () => {
   const navigate = useNavigate();
@@ -9,11 +9,12 @@ const Landing: Component = () => {
   const [octOffset, setOctOffset] = createSignal(300);
   const octProgress = () => Math.min(scrollY() / octOffset(), 1);
 
-  onMount(() => {
-    const token = getToken();
-    if (token) {
-      const role = localStorage.getItem("role");
-      navigate(role === "admin" ? "/admin" : "/dashboard", { replace: true });
+  onMount(async () => {
+    if (!isAuthenticated()) {
+      await checkSession();
+    }
+    if (isAuthenticated()) {
+      navigate(getRole() === "admin" ? "/admin" : "/dashboard", { replace: true });
       return;
     }
 
@@ -77,7 +78,7 @@ const Landing: Component = () => {
         <div
           class="absolute left-1/2"
           style={{
-            "font-family": "'Anybody', sans-serif",
+            "font-family": "'Azonix', sans-serif",
             "font-weight": 400,
             color: "#ffffff",
             "text-transform": "uppercase",

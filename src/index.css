@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "Azonix";
+  src: url("/fonts/Azonix.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
   --color-surface: #131313;
   --color-surface-dim: #131313;
@@ -56,9 +64,9 @@
   --color-text-muted: #999999;
   --color-ice-blue: #c3d9f3;
 
-  --font-headline-xl: "Anybody", sans-serif;
-  --font-headline-lg: "Anybody", sans-serif;
-  --font-headline-md: "Anybody", sans-serif;
+  --font-headline-xl: "Azonix", sans-serif;
+  --font-headline-lg: "Azonix", sans-serif;
+  --font-headline-md: "Azonix", sans-serif;
   --font-body-lg: "Source Serif 4", serif;
   --font-body-md: "Source Serif 4", serif;
   --font-data-lg: "JetBrains Mono", monospace;

@@ -1,6 +1,6 @@
 import { createSignal, onMount, onCleanup, type Component } from "solid-js";
-import { useNavigate, A } from "@solidjs/router";
-import { getUsername, getRole, clearToken } from "../api";
+import { A, useNavigate } from "@solidjs/router";
+import { getUsername, getRole, clearToken, apiPost } from "../api";
 
 const baseNavItems: { href: string; label: string; match: string }[] = [
   { href: "/dashboard", label: "DASHBOARD", match: "dashboard" },
@@ -40,8 +40,9 @@ const TopNav: Component = () => {
   document.addEventListener("mousedown", handleClickOutside);
   onCleanup(() => document.removeEventListener("mousedown", handleClickOutside));
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setMenuOpen(false);
+    await apiPost("/auth/logout", {});
     clearToken();
     navigate("/", { replace: true });
   };

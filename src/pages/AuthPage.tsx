@@ -113,14 +113,14 @@ const AuthPage: Component = () => {
         return;
       }
       setIsLoading(true);
-      const result = await apiPost<{ token: string; username: string }>("/auth/verify", {
+      const result = await apiPost<{ token: string; username: string; role: string }>("/auth/verify", {
         userId: pendingUserId(),
         code,
       });
       setIsLoading(false);
       if (result.success && result.data) {
-        setToken(result.data.token);
-        navigate(getRole() === "admin" ? "/admin" : "/dashboard", { replace: true });
+        setToken(result.data.token, result.data.username, result.data.role);
+        navigate(result.data.role === "admin" ? "/admin" : "/dashboard", { replace: true });
       } else {
         setError(result.error || "Verification failed.");
       }
@@ -169,7 +169,7 @@ const AuthPage: Component = () => {
     const body: Record<string, unknown> = { username: trimmedUsername, password: password() };
     if (isRegistering()) body.email = trimmedEmail;
 
-    const result = await apiPost<{ token: string; username: string; needsVerification?: boolean; userId?: string; email?: string }>(endpoint, body);
+    const result = await apiPost<{ token: string; username: string; role: string; needsVerification?: boolean; userId?: string; email?: string }>(endpoint, body);
 
     setIsLoading(false);
 
@@ -180,8 +180,8 @@ const AuthPage: Component = () => {
         setPendingVerification(true);
         setOtp(["", "", "", "", "", ""]);
       } else if (result.data.token) {
-        setToken(result.data.token);
-        navigate(getRole() === "admin" ? "/admin" : "/dashboard", { replace: true });
+        setToken(result.data.token, result.data.username, result.data.role);
+        navigate(result.data.role === "admin" ? "/admin" : "/dashboard", { replace: true });
       }
     } else {
       setError(result.error || "Operation failed.");
@@ -462,6 +462,12 @@ const AuthPage: Component = () => {
                   <span class="font-label-sm text-label-sm text-text-muted uppercase tracking-[1px] opacity-60">Privacy Policy</span>
                   <span class="text-hairline">|</span>
                   <span class="font-label-sm text-label-sm text-text-muted uppercase tracking-[1px] opacity-60">Terms & Conditions</span>
+                </div>
+                <div class="mt-md text-center">
+                  <p class="font-body-md text-xs text-text-muted leading-relaxed">
+                    By signing in, you consent to the use of essential cookies for session management.
+                    <span class="block">See the cookie banner for analytics preferences.</span>
+                  </p>
                 </div>
               </div>
             </form>

@@ -2,8 +2,14 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
+import cookieParser from "cookie-parser";
+import path from "path";
+import { fileURLToPath } from "url";
 import authRoutes from "./routes/auth.js";
 import stationsRoutes from "./routes/stations.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -21,13 +27,16 @@ app.set("trust proxy", true);
 const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",").map((o) => o.trim())
   : ["http://localhost:3000", "http://127.0.0.1:3000"];
-app.use(cors({ origin: ALLOWED_ORIGINS }));
+app.use(cors({ origin: ALLOWED_ORIGINS, credentials: true }));
 app.use(express.json());
+app.use(cookieParser());
 
 // Routes
-app.get("/", (_req, res) => {
-  res.redirect("/api/health");
-});
+if (process.env.NODE_ENV !== "production") {
+  app.get("/", (_req, res) => {
+    res.redirect("/api/health");
+  });
+}
 app.use("/api/auth", authRoutes);
 app.use("/api/stations", stationsRoutes);
 
@@ -35,6 +44,16 @@ app.use("/api/stations", stationsRoutes);
 app.get("/api/health", (_req, res) => {
   res.json({ status: "online", timestamp: new Date().toISOString() });
 });
+
+// Serve built frontend in production
+if (process.env.NODE_ENV === "production") {
+  const clientDist = path.resolve(__dirname, "../../dist");
+  app.use(express.static(clientDist));
+  app.get("*", (_req, res) => {
+    res.sendFile(path.join(clientDist, "index.html"));
+  });
+  console.log(`Serving frontend from ${clientDist}`);
+}
 
 // Connect to MongoDB and start server
 async function start() {

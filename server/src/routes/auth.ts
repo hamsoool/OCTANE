@@ -5,6 +5,8 @@ import User from "../models/User.js";
 import { sendVerificationCode } from "../utils/email.js";
 import { getRedis } from "../utils/redis.js";
 import { ipRateLimit } from "../middleware/rateLimit.js";
+import { authenticateToken } from "../middleware/auth.js";
+import type { AuthRequest } from "../middleware/auth.js";
 
 const router = Router();
 
@@ -31,6 +33,17 @@ function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function setSessionCookie(res: Response, token: string): void {
+  const isProduction = process.env.NODE_ENV === "production";
+  res.cookie("session", token, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
+    maxAge: 24 * 60 * 60 * 1000,
+    path: "/",
+  });
 }
 
 // POST /api/auth/signin
@@ -140,6 +153,7 @@ router.post("/signin", async (req: Request, res: Response) => {
       JWT_SECRET,
       { expiresIn: "24h" }
     );
+    setSessionCookie(res, token);
 
     res.json({
       message: "Authorization granted.",
@@ -249,6 +263,7 @@ router.post("/verify", async (req: Request, res: Response) => {
       JWT_SECRET,
       { expiresIn: "24h" }
     );
+    setSessionCookie(res, token);
 
     res.json({
       message: "Verification successful.",
@@ -261,6 +276,26 @@ router.post("/verify", async (req: Request, res: Response) => {
     console.error("Verification error:", error);
     res.status(500).json({ message: "System error. Please try again." });
   }
+});
+
+// GET /api/auth/me — return current user from cookie session
+router.get("/me", authenticateToken, (req: AuthRequest, res: Response) => {
+  res.json({
+    userId: req.user!.id,
+    username: req.user!.username,
+    role: req.user!.role,
+  });
+});
+
+// POST /api/auth/logout — clear session cookie
+router.post("/logout", (_req: Request, res: Response) => {
+  const isProduction = process.env.NODE_ENV === "production";
+  res.clearCookie("session", {
+    path: "/",
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
+  });
+  res.json({ message: "Logged out." });
 });
 
 export default router;
