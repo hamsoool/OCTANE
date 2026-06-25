@@ -21,6 +21,10 @@ interface Station {
   coordinates: [number, number]; // [lng, lat]
 }
 
+type Suggestion =
+  | { type: "station"; station: Station; matchName: string }
+  | { type: "location"; name: string; lat: number; lon: number };
+
 const DEFAULT_LOCATION = {
   name: "Olongapo City, Zambales, Philippines",
   lng: 120.2824,
@@ -40,7 +44,7 @@ const MapPage: Component = () => {
   let mapContainer: HTMLDivElement | undefined;
   const [map, setMap] = createSignal<maplibregl.Map | null>(null);
   const [selectedStationId, setSelectedStationId] = createSignal<string | null>(null);
-  const [showMobileResults, setShowMobileResults] = createSignal<boolean>(false);
+  const [showMobileResults, setShowMobileResults] = createSignal<boolean>(true);
   const [searchQuery, setSearchQuery] = createSignal<string>("");
   const [isSearching, setIsSearching] = createSignal<boolean>(false);
   const [isMapInitializing, setIsMapInitializing] = createSignal<boolean>(true);
@@ -79,7 +83,7 @@ const MapPage: Component = () => {
   const [mapCenter, setMapCenter] = createSignal<[number, number]>([DEFAULT_LOCATION.lng, DEFAULT_LOCATION.lat]);
   
   // Geocoding signals
-  const [suggestions, setSuggestions] = createSignal<{ name: string; lat: number; lon: number }[]>([]);
+  const [suggestions, setSuggestions] = createSignal<Suggestion[]>([]);
   const [statusMessage, setStatusMessage] = createSignal<string>("");
 
   const [syncTime, setSyncTime] = createSignal<string>("");
@@ -371,14 +375,10 @@ const MapPage: Component = () => {
   const performGeocoding = async (query: string): Promise<any[]> => {
     const trimmed = query.trim().toLowerCase();
     if (cache.has(trimmed)) {
-      const cachedData = cache.get(trimmed) || [];
-      handleGeocodingResults(cachedData);
-      return cachedData;
+      return cache.get(trimmed) || [];
     }
 
     try {
-      setIsSearching(true);
-      setStatusMessage("QUERYING_DATABASE");
       const response = await fetch(
         `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&addressdetails=1`,
         {
@@ -392,31 +392,11 @@ const MapPage: Component = () => {
       }
       const data = await response.json();
       cache.set(trimmed, data);
-      handleGeocodingResults(data);
       return data;
     } catch (err) {
       console.error("Geocoding fetch failed:", err);
-      setStatusMessage("CONNECTION_FAILED");
-      setSuggestions([]);
       return [];
-    } finally {
-      setIsSearching(false);
     }
-  };
-
-  const handleGeocodingResults = (data: any[]) => {
-    if (!data || data.length === 0) {
-      setStatusMessage("NO_RESULTS_FOUND");
-      setSuggestions([]);
-      return;
-    }
-    setStatusMessage("");
-    const formatted = data.map((item: any) => ({
-      name: item.display_name,
-      lat: parseFloat(item.lat),
-      lon: parseFloat(item.lon)
-    }));
-    setSuggestions(formatted);
   };
 
   const debounceSearch = (query: string) => {
@@ -424,16 +404,49 @@ const MapPage: Component = () => {
       clearTimeout(debounceTimer);
     }
 
-    if (!query.trim()) {
+    const trimmed = query.trim();
+    if (!trimmed) {
       setSuggestions([]);
       setStatusMessage("");
       return;
     }
 
-    setStatusMessage("SCANNING");
+    const stationResults: Suggestion[] = allStations()
+      .filter((s) => s.name.toLowerCase().includes(trimmed.toLowerCase()))
+      .slice(0, 5)
+      .map((s) => ({
+        type: "station" as const,
+        station: s,
+        matchName: s.name,
+      }));
+
+    if (stationResults.length > 0) {
+      setSuggestions(stationResults);
+      setStatusMessage("");
+    } else {
+      setStatusMessage("SCANNING");
+    }
+
     debounceTimer = window.setTimeout(async () => {
-      await performGeocoding(query);
-    }, 1000);
+      const geoData = await performGeocoding(trimmed);
+      const locationResults: Suggestion[] = (geoData || [])
+        .slice(0, 5)
+        .map((item: any) => ({
+          type: "location" as const,
+          name: item.display_name,
+          lat: parseFloat(item.lat),
+          lon: parseFloat(item.lon),
+        }));
+
+      const merged = [...stationResults, ...locationResults];
+      if (merged.length === 0) {
+        setStatusMessage("NO_RESULTS_FOUND");
+        setSuggestions([]);
+      } else {
+        setStatusMessage("");
+        setSuggestions(merged);
+      }
+    }, 1200);
   };
 
   const handleInput = (e: InputEvent & { currentTarget: HTMLInputElement }) => {
@@ -458,6 +471,12 @@ const MapPage: Component = () => {
     setStatusMessage("");
   };
 
+  const selectStationSuggestion = (station: Station) => {
+    selectStation(station);
+    setSuggestions([]);
+    setStatusMessage("");
+  };
+
   const handleSearch = async (e: KeyboardEvent) => {
     if (e.key === "Enter") {
       if (debounceTimer) {
@@ -478,10 +497,25 @@ const MapPage: Component = () => {
         }
       }
 
+      const q = query.toLowerCase();
+      const stationMatch = allStations().find((s) =>
+        s.name.toLowerCase().includes(q)
+      );
+      if (stationMatch) {
+        selectStationSuggestion(stationMatch);
+        return;
+      }
+
+      setStatusMessage("LOCATING");
+      setIsSearching(true);
       const data = await performGeocoding(query);
+      setIsSearching(false);
+
       if (data && data.length > 0) {
         const first = data[0];
         selectLocation(parseFloat(first.lon), parseFloat(first.lat), first.display_name);
+      } else {
+        setStatusMessage("NO_RESULTS_FOUND");
       }
     }
   };
@@ -537,66 +571,79 @@ const MapPage: Component = () => {
         )}
       </div>
 
-      {/* Search Overlay */}
-      <div class="absolute top-container-margin left-container-margin right-container-margin md:left-container-margin md:right-auto md:w-[400px] z-20 flex flex-col gap-xs">
-        <div class="bg-surface-soft border border-hairline p-sm flex items-center gap-xs">
-          <span class="material-symbols-outlined text-on-surface-variant">
-            {isSearching() ? "sync" : "search"}
-          </span>
-          <input
-            class="bg-transparent border-none focus:ring-0 text-primary font-label-md w-full placeholder:text-on-surface-variant uppercase tracking-[1px] outline-none"
-            placeholder={isSearching() ? "LOCATING..." : "SEARCH COORDINATES OR REGION"}
-            aria-label="Search region or coordinates"
-            type="text"
-            value={searchQuery()}
-            onInput={handleInput}
-            onKeyDown={handleSearch}
-          />
-        </div>
-
-        {/* Status Message Display */}
-        {statusMessage() && (
-          <div class="bg-surface-soft border border-hairline p-xs font-label-sm text-[10px] text-text-muted uppercase tracking-wider text-center">
-            [ STATUS: {statusMessage()} ]
-          </div>
-        )}
-
-        {/* Suggestions Autocomplete List */}
-        {suggestions().length > 0 && (
-          <div class="bg-surface border border-hairline flex flex-col max-h-[200px] overflow-y-auto">
-            <For each={suggestions()}>
-              {(item) => (
-                <button
-                  onClick={() => selectLocation(item.lon, item.lat, item.name)}
-                  class="w-full text-left p-xs border-b border-hairline font-label-sm text-[10px] text-primary hover:bg-surface-soft transition-colors uppercase truncate cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  {item.name}
-                </button>
-              )}
-            </For>
-          </div>
-        )}
-      </div>
-
       {/* Side Panel */}
       <aside class={`absolute md:relative z-10 flex flex-col w-full md:w-[400px] h-full md:h-auto bg-surface border-r border-hairline mt-xl md:mt-0 transition-transform duration-300 ${
-        showMobileResults() ? "translate-y-0" : "translate-y-full md:translate-y-0"
+        showMobileResults() ? "translate-y-0 md:translate-x-0" : "translate-y-full md:-translate-x-full md:translate-y-0"
       }`}>
-        <div class="p-container-margin border-b border-hairline bg-surface-soft flex justify-between items-center">
-          <div>
-            <h2 class="font-headline-md text-headline-md uppercase tracking-wider mb-xs">NEARBY_UNITS</h2>
-            <p class="font-label-sm text-label-sm text-text-muted">SCANNING RADIUS: 5.0KM</p>
+        <div class="p-container-margin border-b border-hairline bg-surface-soft">
+          <div class="flex justify-between items-center mb-xs">
+            <div>
+              <h2 class="font-headline-md text-headline-md uppercase tracking-wider mb-xs">NEARBY_UNITS</h2>
+              <p class="font-label-sm text-label-sm text-text-muted">SCANNING RADIUS: 5.0KM</p>
+            </div>
           </div>
-          <button 
-            class="md:hidden text-primary hover:text-text-muted" 
+          <div class="bg-background border border-hairline p-sm flex items-center gap-xs">
+            <span class="material-symbols-outlined text-on-surface-variant">
+              {isSearching() ? "sync" : "search"}
+            </span>
+            <input
+              class="bg-transparent border-none focus:ring-0 text-primary font-label-md w-full placeholder:text-on-surface-variant uppercase tracking-[1px] outline-none"
+              placeholder={isSearching() ? "LOCATING..." : "SEARCH COORDINATES OR REGION"}
+              aria-label="Search region or coordinates"
+              type="text"
+              value={searchQuery()}
+              onInput={handleInput}
+              onKeyDown={handleSearch}
+            />
+          </div>
+          {statusMessage() && (
+            <div class="bg-background border border-hairline border-t-0 p-xs font-label-sm text-[10px] text-text-muted uppercase tracking-wider text-center">
+              [ STATUS: {statusMessage()} ]
+            </div>
+          )}
+          {suggestions().length > 0 && (
+            <div class="bg-background border border-hairline border-t-0 flex flex-col max-h-[200px] overflow-y-auto">
+              <For each={suggestions()}>
+                {(item) => {
+                  if (item.type === "station") {
+                    return (
+                      <button
+                        onClick={() => selectStationSuggestion(item.station)}
+                        class="w-full text-left p-xs border-b border-hairline last:border-b-0 hover:bg-surface-soft transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
+                      >
+                        <p class="font-label-md text-[11px] text-primary uppercase tracking-[1px]">{item.station.name.replace(/_/g, " ")}</p>
+                        <p class="font-label-sm text-[9px] text-text-muted uppercase tracking-[1px] mt-[1px]">{item.station.priceGrade ? `${item.station.price} ${item.station.priceGrade}` : "STATION"}</p>
+                      </button>
+                    );
+                  }
+                  return (
+                    <button
+                      onClick={() => selectLocation(item.lon, item.lat, item.name)}
+                      class="w-full text-left p-xs border-b border-hairline last:border-b-0 hover:bg-surface-soft transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
+                    >
+                      <p class="font-label-sm text-[10px] text-primary uppercase tracking-[1px] truncate">{item.name}</p>
+                      <p class="font-label-sm text-[9px] text-text-muted uppercase tracking-[1px] mt-[1px]">LOCATION</p>
+                    </button>
+                  );
+                }}
+              </For>
+            </div>
+          )}
+        </div>
+
+        {/* Desktop Collapse Tab */}
+        <div class="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2 translate-x-full z-20">
+          <button
             onClick={() => setShowMobileResults(false)}
+            class="bg-surface border border-r-0 border-hairline py-xs px-[6px] flex flex-col items-center gap-xs text-primary hover:bg-surface-soft transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
             type="button"
-            aria-label="Close sidebar results"
+            aria-label="Collapse sidebar"
           >
-            <span class="material-symbols-outlined">close</span>
+            <span class="material-symbols-outlined text-lg">keyboard_arrow_left</span>
+            <span class="font-label-sm text-[8px] uppercase tracking-[1px]" style={{ "writing-mode": "vertical-rl" }}>HIDE</span>
           </button>
         </div>
-        
+
         {/* Dynamic Sidebar List / Empty State */}
         <div class="flex-grow overflow-y-auto">
           {stations().length === 0 ? (
@@ -730,13 +777,28 @@ const MapPage: Component = () => {
       {/* Mobile Results Toggle */}
       <div class="md:hidden absolute bottom-4 left-1/2 -translate-x-1/2 z-30">
         <button 
-          onClick={() => setShowMobileResults(true)}
+          onClick={() => setShowMobileResults(!showMobileResults())}
           class="bg-surface border border-hairline px-md py-xs flex items-center gap-xs rounded-full focus:outline-none focus:ring-1 focus:ring-primary"
           type="button"
-          aria-label="Show sidebar results"
+          aria-label={showMobileResults() ? "Hide sidebar results" : "Show sidebar results"}
         >
-          <span class="font-label-md text-label-md uppercase tracking-[2px]">SHOW_RESULTS</span>
-          <span class="material-symbols-outlined">keyboard_arrow_up</span>
+          <span class="font-label-md text-label-md uppercase tracking-[2px]">{showMobileResults() ? "HIDE" : "SHOW_RESULTS"}</span>
+          <span class="material-symbols-outlined">{showMobileResults() ? "keyboard_arrow_down" : "keyboard_arrow_up"}</span>
+        </button>
+      </div>
+
+      {/* Desktop Sidebar Reopen */}
+      <div class="hidden md:flex absolute top-0 left-0 h-full z-20 items-center">
+        <button 
+          onClick={() => setShowMobileResults(true)}
+          class={`bg-surface border border-l-0 border-hairline py-xs px-[6px] flex flex-col items-center gap-xs text-primary hover:bg-surface-soft transition-colors focus:outline-none focus:ring-1 focus:ring-primary ${
+            showMobileResults() ? "hidden" : ""
+          }`}
+          type="button"
+          aria-label="Open sidebar"
+        >
+          <span class="material-symbols-outlined text-lg">keyboard_arrow_right</span>
+          <span class="font-label-sm text-[8px] uppercase tracking-[1px]" style={{ "writing-mode": "vertical-rl" }}>UNITS</span>
         </button>
       </div>
     </div>
