@@ -13,6 +13,7 @@ export interface IUser extends Document {
   verificationCode: string | null;
   verificationExpires: Date | null;
   lastCodeSentAt: Date | null;
+  cookiePreferences: { functional: boolean; statistics: boolean; marketing: boolean } | null;
   createdAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
   compareVerificationCode(code: string): Promise<boolean>;
@@ -64,6 +65,10 @@ const userSchema = new Schema<IUser>({
   },
   lastCodeSentAt: {
     type: Date,
+    default: null,
+  },
+  cookiePreferences: {
+    type: Schema.Types.Mixed,
     default: null,
   },
   createdAt: {

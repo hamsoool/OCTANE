@@ -2,6 +2,7 @@ import { createSignal, createEffect, onCleanup, type Component } from "solid-js"
 import { useNavigate } from "@solidjs/router";
 import { Navigate } from "@solidjs/router";
 import { apiPost, setToken, getRole, getToken } from "../api";
+import { requestCookieConsent } from "../components/CookieConsent";
 
 const AuthPage: Component = () => {
   const navigate = useNavigate();
@@ -112,14 +113,19 @@ const AuthPage: Component = () => {
         setError("Enter the complete 6-digit code.");
         return;
       }
-      setIsLoading(true);
-      const result = await apiPost<{ token: string; username: string; role: string }>("/auth/verify", {
+    requestCookieConsent();
+
+    setIsLoading(true);
+      const result = await apiPost<{ token: string; username: string; role: string; cookiePreferences?: Record<string, boolean> }>("/auth/verify", {
         userId: pendingUserId(),
         code,
       });
       setIsLoading(false);
       if (result.success && result.data) {
         setToken(result.data.token, result.data.username, result.data.role);
+        if (result.data.cookiePreferences) {
+          localStorage.setItem("octane_cookie_consent", JSON.stringify(result.data.cookiePreferences));
+        }
         navigate(result.data.role === "admin" ? "/admin" : "/dashboard", { replace: true });
       } else {
         setError(result.error || "Verification failed.");
@@ -169,7 +175,7 @@ const AuthPage: Component = () => {
     const body: Record<string, unknown> = { username: trimmedUsername, password: password() };
     if (isRegistering()) body.email = trimmedEmail;
 
-    const result = await apiPost<{ token: string; username: string; role: string; needsVerification?: boolean; userId?: string; email?: string }>(endpoint, body);
+    const result = await apiPost<{ token: string; username: string; role: string; cookiePreferences?: Record<string, boolean>; needsVerification?: boolean; userId?: string; email?: string }>(endpoint, body);
 
     setIsLoading(false);
 
@@ -181,6 +187,9 @@ const AuthPage: Component = () => {
         setOtp(["", "", "", "", "", ""]);
       } else if (result.data.token) {
         setToken(result.data.token, result.data.username, result.data.role);
+        if (result.data.cookiePreferences) {
+          localStorage.setItem("octane_cookie_consent", JSON.stringify(result.data.cookiePreferences));
+        }
         navigate(result.data.role === "admin" ? "/admin" : "/dashboard", { replace: true });
       }
     } else {

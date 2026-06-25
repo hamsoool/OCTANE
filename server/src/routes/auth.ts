@@ -161,6 +161,7 @@ router.post("/signin", async (req: Request, res: Response) => {
       userId: user.userId,
       username: user.username,
       role: user.role,
+      cookiePreferences: user.cookiePreferences || null,
     });
   } catch (error) {
     console.error("Sign-in error:", error);
@@ -271,6 +272,7 @@ router.post("/verify", async (req: Request, res: Response) => {
       userId: user.userId,
       username: user.username,
       role: user.role,
+      cookiePreferences: user.cookiePreferences || null,
     });
   } catch (error) {
     console.error("Verification error:", error);
@@ -279,12 +281,34 @@ router.post("/verify", async (req: Request, res: Response) => {
 });
 
 // GET /api/auth/me — return current user from cookie session
-router.get("/me", authenticateToken, (req: AuthRequest, res: Response) => {
-  res.json({
-    userId: req.user!.id,
-    username: req.user!.username,
-    role: req.user!.role,
-  });
+router.get("/me", authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await User.findById(req.user!.id).lean();
+    if (!user) {
+      res.status(404).json({ message: "User not found." });
+      return;
+    }
+    res.json({
+      userId: user.userId,
+      username: user.username,
+      role: user.role,
+      cookiePreferences: user.cookiePreferences || null,
+    });
+  } catch {
+    res.status(500).json({ message: "System error." });
+  }
+});
+
+// PATCH /api/auth/cookie-preferences — save cookie preferences
+router.patch("/cookie-preferences", authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { functional, statistics, marketing } = req.body;
+    const prefs = { functional: !!functional, statistics: !!statistics, marketing: !!marketing };
+    await User.findByIdAndUpdate(req.user!.id, { cookiePreferences: prefs });
+    res.json({ message: "Cookie preferences saved.", cookiePreferences: prefs });
+  } catch {
+    res.status(500).json({ message: "System error." });
+  }
 });
 
 // POST /api/auth/logout — clear session cookie

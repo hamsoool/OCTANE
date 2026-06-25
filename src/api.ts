@@ -1,5 +1,7 @@
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
+const STORAGE_KEY = "octane_cookie_consent";
+
 let currentToken: string | null = null;
 let currentUser: { username: string; role: string } | null = null;
 
@@ -15,6 +17,24 @@ export async function apiPost<T>(endpoint: string, body: Record<string, unknown>
     const res = await fetch(`${API_BASE}${endpoint}`, {
       ...fetchOpts(),
       method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.message || "Request failed." };
+    }
+    return { success: true, data };
+  } catch {
+    return { success: false, error: "Unable to reach the system. Check your connection." };
+  }
+}
+
+export async function apiPatch<T>(endpoint: string, body: Record<string, unknown>): Promise<{ success: boolean; data?: T; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+      ...fetchOpts(),
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
@@ -68,12 +88,19 @@ export function getRole(): string | null {
 }
 
 export async function checkSession(): Promise<boolean> {
-  const res = await apiGet<{ userId: string; username: string; role: string }>("/auth/me");
+  const res = await apiGet<{ userId: string; username: string; role: string; cookiePreferences?: Record<string, boolean> | null }>("/auth/me");
   if (res.success && res.data) {
     currentUser = { username: res.data.username, role: res.data.role };
     currentToken = "session";
+    if (res.data.cookiePreferences) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(res.data.cookiePreferences));
+    }
     return true;
   }
   clearToken();
   return false;
+}
+
+export async function syncCookiePreferences(prefs: Record<string, boolean>): Promise<void> {
+  await apiPatch("/auth/cookie-preferences", prefs);
 }

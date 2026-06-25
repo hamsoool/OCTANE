@@ -13,26 +13,28 @@ const MapPage = lazy(() => import("./pages/MapPage"));
 
 const App: Component = () => {
   return (
-    <Router>
-      <Route path="/" component={Landing} />
-      <Route path="/auth" component={AuthPage} />
-      <Route path="/dashboard" component={AppLayout}>
-        <Route path="/" component={Dashboard} />
-      </Route>
-      <Route path="/admin" component={AppLayout}>
-        <Route path="/" component={AdminDashboard} />
-      </Route>
-      <Route path="/watchlist" component={AppLayout}>
-        <Route path="/" component={Watchlist} />
-      </Route>
-      <Route path="/map" component={AppLayout}>
-        <Route path="/" component={MapPage} />
-      </Route>
-      <Route path="/stations" component={AppLayout}>
-        <Route path="/" component={Stations} />
-      </Route>
+    <>
+      <Router>
+        <Route path="/" component={Landing} />
+        <Route path="/auth" component={AuthPage} />
+        <Route path="/dashboard" component={AppLayout}>
+          <Route path="/" component={Dashboard} />
+        </Route>
+        <Route path="/admin" component={AppLayout}>
+          <Route path="/" component={AdminDashboard} />
+        </Route>
+        <Route path="/watchlist" component={AppLayout}>
+          <Route path="/" component={Watchlist} />
+        </Route>
+        <Route path="/map" component={AppLayout}>
+          <Route path="/" component={MapPage} />
+        </Route>
+        <Route path="/stations" component={AppLayout}>
+          <Route path="/" component={Stations} />
+        </Route>
+      </Router>
       <CookieConsent />
-    </Router>
+    </>
   );
 };
 
