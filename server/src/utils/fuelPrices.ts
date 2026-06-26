@@ -1,12 +1,4 @@
-/**
- * fuelPrices.ts
- *
- * Fetches and parses the latest North Luzon Pump Prices from the soul-scraper
- * DOE PDF Aggregator API. Uses the COMMON PRICE column extracted from the PDF
- * text to produce per-grade prices representative of the Region III area.
- *
- * Cache TTL: 6 hours (free-tier Render cold-start friendly)
- */
+import { getRedis } from "./redis.js";
 
 interface FuelGradePrices {
   ron91?: string;
@@ -20,7 +12,10 @@ interface CacheEntry {
   fetchedAt: number;
 }
 
-const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours (in-memory fallback)
+const REDIS_FUEL_KEY = "fuel:prices:north-luzon";
+const REDIS_FUEL_TTL_SEC = 86400; // 24 hours
+
 let cache: CacheEntry | null = null;
 
 const DOE_API_URL =
@@ -155,11 +150,30 @@ function parseFuelContent(content: string): FuelGradePrices {
  * Results are cached for 6 hours.
  */
 export async function getFuelPrices(): Promise<FuelGradePrices> {
+  const redis = getRedis();
   const now = Date.now();
+
+  // 1. Try Redis cache first
+  if (redis) {
+    try {
+      const cached = await redis.get(REDIS_FUEL_KEY);
+      if (cached) {
+        const prices = typeof cached === "string" ? JSON.parse(cached) : (cached as FuelGradePrices);
+        // Warm in-memory cache for fallback if Redis goes down
+        cache = { prices, fetchedAt: now };
+        return prices;
+      }
+    } catch (err) {
+      console.error("[fuelPrices] Redis cache read error:", err);
+    }
+  }
+
+  // 2. Try in-memory cache (within TTL)
   if (cache && now - cache.fetchedAt < CACHE_TTL_MS) {
     return cache.prices;
   }
 
+  // 3. Fetch from soul-scraper API
   try {
     const listRes = await fetchWithRetry(
       `${DOE_API_URL}/documents?category=North%20Luzon%20Pump%20Prices&limit=20`,
@@ -192,6 +206,13 @@ export async function getFuelPrices(): Promise<FuelGradePrices> {
           console.log(
             `[fuelPrices] Loaded prices from doc ${doc.id} "${doc.title}": ${JSON.stringify(parsed)}`
           );
+
+          // Store in Redis
+          if (redis) {
+            redis.setex(REDIS_FUEL_KEY, REDIS_FUEL_TTL_SEC, JSON.stringify(parsed))
+              .catch((err: any) => console.error("[fuelPrices] Redis cache write error:", err));
+          }
+
           return parsed;
         }
       } catch (innerErr) {
@@ -202,10 +223,13 @@ export async function getFuelPrices(): Promise<FuelGradePrices> {
     throw new Error("No parseable North Luzon fuel price documents found");
   } catch (err) {
     console.error("[fuelPrices] Failed to fetch fuel prices:", err);
-    if (cache) {
-      console.warn("[fuelPrices] Returning stale cached prices.");
-      return cache.prices;
-    }
-    return {};
   }
+
+  // 4. Last resort: stale in-memory cache
+  if (cache) {
+    console.warn("[fuelPrices] Returning stale cached prices.");
+    return cache.prices;
+  }
+
+  return {};
 }

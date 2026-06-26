@@ -3,6 +3,8 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { MAP_THEMES, applyThemeStyle, toggleMapLayerVisibility } from "../constants/mapThemes";
 import { apiGet } from "../api";
+import { startWatching, stopWatching } from "../services/geolocation";
+import { DISTANCE_CONFIG, GPS_CONFIG } from "../constants/navigation";
 
 interface FuelData {
   diesel?: string;
@@ -20,7 +22,7 @@ interface Station {
   priceGrade?: string;
   fuelData?: FuelData;
   dist: string;
-  coordinates: [number, number]; // [lng, lat]
+  coordinates: [number, number];
 }
 
 type Suggestion =
@@ -142,7 +144,6 @@ function fuelLabel(brand: string | undefined, grade: string): string {
   }
 }
 
-
 const MapPage: Component = () => {
   let mapContainer: HTMLDivElement | undefined;
   const [map, setMap] = createSignal<maplibregl.Map | null>(null);
@@ -152,14 +153,13 @@ const MapPage: Component = () => {
   const [isSearching, setIsSearching] = createSignal<boolean>(false);
   const [isMapInitializing, setIsMapInitializing] = createSignal<boolean>(true);
   const [allStations, setAllStations] = createSignal<Station[]>(initialStations);
-  
+
   // Theme signals
   const [selectedTheme, setSelectedTheme] = createSignal<string>(
     localStorage.getItem("octane-map-theme") || "DEFAULT"
   );
   const [showThemePanel, setShowThemePanel] = createSignal<boolean>(false);
 
-  // Load layer visibility settings from local storage
   const getInitialVisibility = () => {
     const saved = localStorage.getItem("octane-layer-visibility");
     if (saved) {
@@ -182,9 +182,8 @@ const MapPage: Component = () => {
 
   const [layerVisibility, setLayerVisibility] = createSignal<Record<string, boolean>>(getInitialVisibility());
 
-  // Dynamic Map Center state for distance calculations
   const [mapCenter, setMapCenter] = createSignal<[number, number]>([DEFAULT_LOCATION.lng, DEFAULT_LOCATION.lat]);
-  
+
   // Geocoding signals
   const [suggestions, setSuggestions] = createSignal<Suggestion[]>([]);
   const [statusMessage, setStatusMessage] = createSignal<string>("");
@@ -197,13 +196,14 @@ const MapPage: Component = () => {
   const [userLocation, setUserLocation] = createSignal<[number, number] | null>(null);
   const [userLocationMode, setUserLocationMode] = createSignal<"gps" | "pin" | null>(null);
   const [isPinMode, setIsPinMode] = createSignal<boolean>(false);
-  const [showRoute, setShowRoute] = createSignal<boolean>(false);
-  const [isFetchingRoute, setIsFetchingRoute] = createSignal<boolean>(false);
-  const [routeError, setRouteError] = createSignal<string | null>(null);
 
   // OSRM road distance cache
   const [roadDistances, setRoadDistances] = createSignal<Record<string, number>>({});
   const [isRouting, setIsRouting] = createSignal<boolean>(false);
+
+  // GPS telemetry
+  const [gpsSpeed, setGpsSpeed] = createSignal<number | null>(null);
+  const [gpsAccuracy, setGpsAccuracy] = createSignal<number | null>(null);
 
   const fetchRoadDistances = async (origin: [number, number], stations: Station[]) => {
     if (stations.length === 0) return;
@@ -213,10 +213,10 @@ const MapPage: Component = () => {
       const coords = `${origin[0]},${origin[1]}`;
       const stationCoords = stations.map((s) => `${s.coordinates[0]},${s.coordinates[1]}`).join(";");
       const destIndices = stations.map((_, i) => i + 1).join(";");
-      const url = `https://router.project-osrm.org/table/v1/driving/${coords};${stationCoords}?sources=0&destinations=${destIndices}&annotations=distance`;
+      const url = `${DISTANCE_CONFIG.osrmUrl}/${coords};${stationCoords}?sources=0&destinations=${destIndices}&annotations=distance`;
       const response = await fetch(url, {
-        headers: { "User-Agent": "octane-fuel-intelligence-client" },
-        signal: AbortSignal.timeout(15000),
+        headers: { "User-Agent": DISTANCE_CONFIG.userAgent },
+        signal: AbortSignal.timeout(DISTANCE_CONFIG.osrmTimeoutMs),
       });
       if (!response.ok) throw new Error(`OSRM error ${response.status}`);
       const data = await response.json();
@@ -264,12 +264,12 @@ const MapPage: Component = () => {
 
   let markers: maplibregl.Marker[] = [];
   let debounceTimer: number | null = null;
-  let routeController: AbortController | null = null;
-  const cache = new Map<string, any[]>();
+  const cache = new Map<string, { data: any[]; expiry: number }>();
+  let gpsWatchId: number | null = null;
+  let originMarker: maplibregl.Marker | null = null;
 
-  // Haversine Distance Formula (calculates distance in km between coordinates)
   const calculateDistance = (lon1: number, lat1: number, lon2: number, lat2: number): number => {
-    const R = 6371; // Earth radius in km
+    const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a = 
@@ -280,7 +280,6 @@ const MapPage: Component = () => {
     return R * c;
   };
 
-  // Dynamically compute and sort stations — road distance from origin when available, else haversine
   const stations = () => {
     const center = mapCenter();
     const origin = userLocation();
@@ -328,16 +327,13 @@ const MapPage: Component = () => {
       setMap(mapInstance);
       setIsMapInitializing(false);
 
-      // Apply initial saved theme paint configuration
       applyThemeStyle(mapInstance, selectedTheme());
 
-      // Apply initial saved layer visibility settings
       const vis = layerVisibility();
       Object.entries(vis).forEach(([feature, isVisible]) => {
         toggleMapLayerVisibility(mapInstance, feature, isVisible);
       });
 
-      // Track map coordinates on moveend for optimal performance (saves CPU & redraw cycles)
       mapInstance.on("moveend", () => {
         const center = mapInstance.getCenter();
         setMapCenter([center.lng, center.lat]);
@@ -346,7 +342,7 @@ const MapPage: Component = () => {
     });
   });
 
-  // Dynamic Markers & Popup Sync via Reactivity Effect
+  // Dynamic Markers & Popup Sync
   createEffect(() => {
     const currentMap = map();
     if (!currentMap) return;
@@ -354,11 +350,9 @@ const MapPage: Component = () => {
     const markerColor = MAP_THEMES[theme as keyof typeof MAP_THEMES]?.colors?.marker ?? "#e0e0e0";
     const markerSelectedColor = MAP_THEMES[theme as keyof typeof MAP_THEMES]?.colors?.markerSelected ?? "#c3d9f3";
 
-    // Clear old markers from the map layout
     markers.forEach((m) => m.remove());
     markers = [];
 
-    // Render active/in-range markers only
     const center = mapCenter();
     const visibleStations = allStations().filter((station) => {
       const dist = calculateDistance(center[0], center[1], station.coordinates[0], station.coordinates[1]);
@@ -378,13 +372,21 @@ const MapPage: Component = () => {
         ? `<span class="material-symbols-outlined" style="font-size: 32px; color: ${markerSelectedColor}; filter: drop-shadow(0 0 6px ${markerSelectedColor}80); font-variation-settings: 'FILL' 1;">local_gas_station</span>`
         : `<span class="material-symbols-outlined" style="font-size: 26px; color: ${markerColor}; filter: drop-shadow(0 0 4px ${markerColor}40); font-variation-settings: 'FILL' 1;">local_gas_station</span>`;
 
-      // Register click listener FIRST, before passing to maplibregl.Marker constructor/setPopup
-      // This allows us to stop propagation and manage popup toggle synchronously without double-toggling
       el.addEventListener("click", (e) => {
         e.stopPropagation();
         e.stopImmediatePropagation();
         selectStation(station, true);
       });
+
+      const roads = roadDistances();
+      const origin = userLocation();
+      const center = mapCenter();
+      const roadKm = roads[station.id];
+      const haversineFromOrigin = origin
+        ? calculateDistance(origin[0], origin[1], station.coordinates[0], station.coordinates[1])
+        : null;
+      const distFromCenter = calculateDistance(center[0], center[1], station.coordinates[0], station.coordinates[1]);
+      const distKm = (roadKm ?? haversineFromOrigin ?? distFromCenter).toFixed(1);
 
       const popup = new maplibregl.Popup({
         offset: 10,
@@ -395,9 +397,7 @@ const MapPage: Component = () => {
         <div class="font-label-sm text-[10px] text-primary uppercase">
           <div class="flex justify-between items-center border-b border-hairline pb-xs mb-xs">
             <span class="font-headline-md text-xs">${station.name}</span>
-            ${userLocation() ? `
-            <span data-route-btn class="material-symbols-outlined text-[16px] text-text-muted hover:text-ice-blue transition-colors cursor-pointer" style="font-variation-settings: 'FILL' 1;">north_east</span>
-            ` : ""}
+            <span class="font-label-sm text-[9px] text-text-muted tracking-[1px]">${distKm} KM</span>
           </div>
           <div class="flex justify-between gap-md mb-xs">
             <span class="text-text-muted">PRICE (APPROX):</span>
@@ -427,19 +427,6 @@ const MapPage: Component = () => {
         </div>
       `);
 
-      // Attach route button click handler directly to popup element
-      // (document-level delegation fails because MapLibre popups intercept pointer events)
-      const popupEl = popup.getElement();
-      if (popupEl) {
-        popupEl.addEventListener("click", (e) => {
-          const target = e.target as HTMLElement;
-          if (target.closest("[data-route-btn]")) {
-            e.stopPropagation();
-            toggleRoute();
-          }
-        });
-      }
-
       const marker = new maplibregl.Marker({ element: el })
         .setLngLat(station.coordinates)
         .setPopup(popup)
@@ -447,27 +434,10 @@ const MapPage: Component = () => {
 
       markers.push(marker);
 
-      // Re-trigger popup if this station is selected
       if (isSelected && !marker.getPopup()?.isOpen()) {
         marker.togglePopup();
       }
     });
-
-    // Render user origin marker
-    const userLoc = userLocation();
-    if (userLoc) {
-      const userEl = document.createElement("div");
-      userEl.id = "user-location-marker";
-      userEl.className = "maplibregl-marker flex items-center justify-center z-50 pointer-events-none";
-      userEl.innerHTML = `<div class="relative flex items-center justify-center">
-        <span class="absolute w-8 h-8 bg-ice-blue opacity-20 rounded-full animate-ping"></span>
-        <span class="material-symbols-outlined" style="font-size: 32px; color: #c3d9f3; filter: drop-shadow(0 0 8px #c3d9f3aa); font-variation-settings: 'FILL' 1;">my_location</span>
-      </div>`;
-      const userMarker = new maplibregl.Marker({ element: userEl })
-        .setLngLat(userLoc)
-        .addTo(currentMap);
-      markers.push(userMarker);
-    }
   });
 
   // Selection Highlight Effect
@@ -479,100 +449,62 @@ const MapPage: Component = () => {
     const markerColor = MAP_THEMES[theme as keyof typeof MAP_THEMES]?.colors?.marker ?? "#e0e0e0";
     const markerSelectedColor = MAP_THEMES[theme as keyof typeof MAP_THEMES]?.colors?.markerSelected ?? "#c3d9f3";
 
-    // Reset all markers to default
     allStations().forEach((station) => {
       const el = document.getElementById(`marker-${station.id}`);
-      if (el) {
+      if (!el) return;
+
+      const isSel = activeId === station.id;
+
+      if (isSel) {
+        el.className = "maplibregl-marker flex items-center justify-center cursor-pointer z-50 animate-pulse";
+        el.innerHTML = `<span class="material-symbols-outlined" style="font-size: 32px; color: ${markerSelectedColor}; filter: drop-shadow(0 0 6px ${markerSelectedColor}99); font-variation-settings: 'FILL' 1;">local_gas_station</span>`;
+      } else {
         el.className = "maplibregl-marker flex items-center justify-center cursor-pointer transition-opacity hover:opacity-75 z-10";
         el.innerHTML = `<span class="material-symbols-outlined" style="font-size: 26px; color: ${markerColor}; filter: drop-shadow(0 0 4px ${markerColor}40); font-variation-settings: 'FILL' 1;">local_gas_station</span>`;
       }
     });
-
-    if (!activeId) return;
-
-    // Highlight the selected marker
-    const selectedEl = document.getElementById(`marker-${activeId}`);
-    if (selectedEl) {
-      const hasActiveRoute = showRoute();
-      selectedEl.className = "maplibregl-marker flex items-center justify-center cursor-pointer z-50 animate-pulse";
-      selectedEl.innerHTML = hasActiveRoute
-        ? `<div class="relative"><span class="material-symbols-outlined" style="font-size: 32px; color: ${markerSelectedColor}; filter: drop-shadow(0 0 6px ${markerSelectedColor}99); font-variation-settings: 'FILL' 1;">local_gas_station</span><span class="absolute -top-1 -right-1 material-symbols-outlined text-[14px] text-ice-blue" style="filter: drop-shadow(0 0 4px #c3d9f3cc); font-variation-settings: 'FILL' 1;">directions</span></div>`
-        : `<span class="material-symbols-outlined" style="font-size: 32px; color: ${markerSelectedColor}; filter: drop-shadow(0 0 6px ${markerSelectedColor}99); font-variation-settings: 'FILL' 1;">local_gas_station</span>`;
-    }
   });
 
-  // Route line drawing effect — fetches and draws route when showRoute is active
+  // Origin marker
   createEffect(() => {
-    const stationId = selectedStationId();
-    const origin = userLocation();
-    const shouldShow = showRoute();
+    const loc = userLocation();
+    const mode = userLocationMode();
     const currentMap = map();
 
-    const cleanupRoute = () => {
-      if (routeController) { routeController.abort(); routeController = null; }
-      const cm = map();
-      if (cm?.getLayer("route-line")) cm.removeLayer("route-line");
-      if (cm?.getSource("route")) cm.removeSource("route");
-    };
-
-    if (!shouldShow || !stationId || !origin || !currentMap) {
-      cleanupRoute();
-      setIsFetchingRoute(false);
+    if (!loc || !currentMap) {
+      if (originMarker) {
+        originMarker.remove();
+        originMarker = null;
+      }
       return;
     }
 
-    const station = allStations().find((s) => s.id === stationId);
-    if (!station) { cleanupRoute(); setIsFetchingRoute(false); return; }
+    if (originMarker) {
+      originMarker.setLngLat(loc);
+      return;
+    }
 
-    setIsFetchingRoute(true);
-    setRouteError(null);
-    routeController = new AbortController();
-    fetch(
-      `https://router.project-osrm.org/route/v1/driving/${origin[0]},${origin[1]};${station.coordinates[0]},${station.coordinates[1]}?overview=full&geometries=geojson&steps=false`,
-      {
-        headers: { "User-Agent": "octane-fuel-intelligence-client" },
-        signal: routeController.signal,
-      }
-    )
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.code !== "Ok" || !data.routes?.[0]?.geometry) {
-          setRouteError("ROUTE_NOT_FOUND");
-          setIsFetchingRoute(false);
-          return;
-        }
-        const cm = map();
-        if (!cm) return;
-        const geoJSON = { type: "Feature", properties: {}, geometry: data.routes[0].geometry };
-        if (cm.getSource("route")) {
-          (cm.getSource("route") as maplibregl.GeoJSONSource).setData(geoJSON as any);
-        } else {
-          cm.addSource("route", { type: "geojson", data: geoJSON as any });
-          cm.addLayer({
-            id: "route-line",
-            type: "line",
-            source: "route",
-            layout: { "line-join": "round", "line-cap": "round" },
-            paint: {
-              "line-color": "#c3d9f3",
-              "line-width": 3,
-              "line-opacity": 0.85,
-              "line-blur": 1,
-            },
-          });
-        }
-        setIsFetchingRoute(false);
-      })
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        console.error("Route fetch error:", err);
-        setRouteError("ROUTE_UNAVAILABLE");
-        setIsFetchingRoute(false);
-      });
+    const el = document.createElement("div");
+    el.id = mode === "gps" ? "user-location-marker" : "origin-pin-marker";
+    el.className = "maplibregl-marker flex items-center justify-center z-50 pointer-events-none";
+
+    if (mode === "gps") {
+      el.innerHTML = `<div class="relative flex items-center justify-center">
+        <span class="absolute w-8 h-8 bg-ice-blue opacity-20 rounded-full animate-ping"></span>
+        <span class="material-symbols-outlined" style="font-size: 32px; color: #c3d9f3; filter: drop-shadow(0 0 8px #c3d9f3aa); font-variation-settings: 'FILL' 1;">my_location</span>
+      </div>`;
+    } else {
+      el.innerHTML = `<span class="material-symbols-outlined" style="font-size: 32px; color: #c3d9f3; filter: drop-shadow(0 0 8px #c3d9f3aa); font-variation-settings: 'FILL' 1;">pin_drop</span>`;
+    }
+
+    originMarker = new maplibregl.Marker({ element: el })
+      .setLngLat(loc)
+      .addTo(currentMap);
   });
 
   onCleanup(() => {
-    if (routeController) { routeController.abort(); routeController = null; }
+    if (gpsWatchId !== null) { stopWatching(gpsWatchId); gpsWatchId = null; }
+    if (originMarker) { originMarker.remove(); originMarker = null; }
     const currentMap = map();
     if (currentMap) {
       currentMap.off("click", handleMapPinClick);
@@ -585,17 +517,14 @@ const MapPage: Component = () => {
 
   const selectStation = (station: Station, fromMap: boolean = false) => {
     setSelectedStationId(station.id);
-    setShowRoute(false);
     updateSyncTime();
 
-    // Toggle popups synchronously to prevent race conditions and double-toggling
     const targetMarker = markers.find(m => {
       const el = m.getElement();
       return el && el.id === `marker-${station.id}`;
     });
 
     if (targetMarker) {
-      // Close other popups
       markers.forEach(m => {
         const p = m.getPopup();
         if (m !== targetMarker && p?.isOpen()) {
@@ -606,10 +535,8 @@ const MapPage: Component = () => {
       const popup = targetMarker.getPopup();
       if (popup) {
         if (fromMap) {
-          // If clicked from map marker itself, toggle it
           targetMarker.togglePopup();
         } else {
-          // If clicked from sidebar/list, ensure it is open
           if (!popup.isOpen()) {
             targetMarker.togglePopup();
           }
@@ -623,9 +550,7 @@ const MapPage: Component = () => {
         center: station.coordinates,
         zoom: fromMap ? Math.max(currentMap.getZoom(), 13) : currentMap.getZoom(),
         essential: true,
-        padding: fromMap
-          ? undefined
-          : { top: 0, bottom: 0, left: window.innerWidth >= 768 ? 400 : 0, right: 0 },
+        padding: { top: 0, bottom: 0, left: fromMap ? 0 : (window.innerWidth >= 768 ? 400 : 0), right: 0 },
       });
     }
     setShowMobileResults(false);
@@ -639,27 +564,59 @@ const MapPage: Component = () => {
     map()?.zoomOut();
   };
 
+  // ====== ORIGIN SELECTION (GPS + PIN) ======
+
+  const startGpsTracking = () => {
+    if (gpsWatchId !== null) return;
+    if (!navigator.geolocation) return;
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const loc: [number, number] = [position.coords.longitude, position.coords.latitude];
+        setUserLocation(loc);
+        setUserLocationMode("gps");
+        setIsPinMode(false);
+        map()?.flyTo({ center: loc, zoom: 14, essential: true });
+        fetchRoadDistances(loc, allStations());
+      },
+      (error) => console.error("Geolocation error:", error),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+    );
+
+    gpsWatchId = startWatching(
+      (position) => {
+        setGpsSpeed(position.coords.speed ? position.coords.speed * 3.6 : null);
+        setGpsAccuracy(position.coords.accuracy);
+        const loc: [number, number] = [position.coords.longitude, position.coords.latitude];
+        setUserLocation(loc);
+        setUserLocationMode("gps");
+      },
+      (error) => console.error("GPS watch error:", error)
+    );
+  };
+
+  const stopGpsTracking = () => {
+    if (gpsWatchId !== null) {
+      stopWatching(gpsWatchId);
+      gpsWatchId = null;
+    }
+    if (originMarker) {
+      originMarker.remove();
+      originMarker = null;
+    }
+  };
+
   const handleLocateMe = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const { longitude, latitude } = position.coords;
-          const loc: [number, number] = [longitude, latitude];
-          setUserLocation(loc);
-          setUserLocationMode("gps");
-          setIsPinMode(false);
-          map()?.flyTo({
-            center: loc,
-            zoom: 14,
-            essential: true
-          });
-          updateSyncTime();
-          fetchRoadDistances(loc, allStations());
-        },
-        (error) => {
-          console.error("Geolocation error:", error);
-        }
-      );
+    if (gpsWatchId !== null) {
+      stopGpsTracking();
+      clearUserLocation();
+    } else {
+      if (isPinMode()) {
+        const currentMap = map();
+        if (currentMap) currentMap.off("click", handleMapPinClick);
+        setIsPinMode(false);
+      }
+      startGpsTracking();
     }
   };
 
@@ -671,6 +628,9 @@ const MapPage: Component = () => {
       }
       setIsPinMode(false);
     } else {
+      if (gpsWatchId !== null) {
+        stopGpsTracking();
+      }
       setIsPinMode(true);
       const currentMap = map();
       if (currentMap) {
@@ -685,36 +645,62 @@ const MapPage: Component = () => {
     setUserLocation(loc);
     setUserLocationMode("pin");
     setIsPinMode(false);
+
     const currentMap = map();
     if (currentMap) {
       currentMap.off("click", handleMapPinClick);
     }
+
+    if (originMarker) {
+      originMarker.remove();
+      originMarker = null;
+    }
+
+    if (currentMap) {
+      const el = document.createElement("div");
+      el.id = "origin-pin-marker";
+      el.className = "maplibregl-marker flex items-center justify-center z-50 cursor-grab active:cursor-grabbing";
+      el.innerHTML = `<span class="material-symbols-outlined" style="font-size: 32px; color: #c3d9f3; filter: drop-shadow(0 0 8px #c3d9f3aa); font-variation-settings: 'FILL' 1;">pin_drop</span>`;
+
+      originMarker = new maplibregl.Marker({ element: el, draggable: true })
+        .setLngLat(loc)
+        .addTo(currentMap);
+
+      originMarker.on("dragend", () => {
+        const pos = originMarker!.getLngLat();
+        const newLoc: [number, number] = [pos.lng, pos.lat];
+        setUserLocation(newLoc);
+        fetchRoadDistances(newLoc, allStations());
+      });
+    }
+
     updateSyncTime();
     fetchRoadDistances(loc, allStations());
   };
 
   const clearUserLocation = () => {
-    if (routeController) { routeController.abort(); routeController = null; }
-    const currentMap = map();
-    if (currentMap) {
-      if (currentMap.getLayer("route-line")) currentMap.removeLayer("route-line");
-      if (currentMap.getSource("route")) currentMap.removeSource("route");
+    stopGpsTracking();
+
+    if (originMarker) {
+      originMarker.remove();
+      originMarker = null;
     }
-    setShowRoute(false);
+
     setUserLocation(null);
     setUserLocationMode(null);
+    setGpsSpeed(null);
+    setGpsAccuracy(null);
     setRoadDistances({});
   };
 
-  const toggleRoute = () => {
-    setShowRoute((prev) => !prev);
-    setRouteError(null);
-  };
+  // ====== SEARCH ======
 
   const performGeocoding = async (query: string): Promise<any[]> => {
     const trimmed = query.trim().toLowerCase();
-    if (cache.has(trimmed)) {
-      return cache.get(trimmed) || [];
+    const now = Date.now();
+    const cached = cache.get(trimmed);
+    if (cached && now < cached.expiry) {
+      return cached.data;
     }
 
     try {
@@ -730,7 +716,11 @@ const MapPage: Component = () => {
         throw new Error("API response error");
       }
       const data = await response.json();
-      cache.set(trimmed, data);
+      if (cache.size >= 100) {
+        const firstKey = cache.keys().next().value;
+        if (firstKey) cache.delete(firstKey);
+      }
+      cache.set(trimmed, { data, expiry: now + 3600000 });
       return data;
     } catch (err) {
       console.error("Geocoding fetch failed:", err);
@@ -925,8 +915,11 @@ const MapPage: Component = () => {
             <div class="flex items-center gap-xs mb-xs">
               <span class="material-symbols-outlined text-[14px] text-ice-blue" style="font-variation-settings: 'FILL' 1;">my_location</span>
               <span class="font-label-sm text-[9px] text-ice-blue uppercase tracking-[1px]">
-                ORIGIN: {userLocationMode() === "gps" ? "GPS FIX" : "PIN DROP"}
+                ORIGIN: {userLocationMode() === "gps" ? (gpsWatchId !== null ? "GPS FIX (LIVE)" : "GPS FIX") : "PIN DROP"}
               </span>
+              {gpsAccuracy() !== null && (
+                <span class="font-label-sm text-[7px] text-text-muted opacity-40 uppercase tracking-[1px]">±{Math.round(gpsAccuracy())}M</span>
+              )}
             </div>
           )}
           {isPinMode() && (
@@ -941,18 +934,7 @@ const MapPage: Component = () => {
               <span class="font-label-sm text-[9px] text-ice-blue uppercase tracking-[1px] animate-pulse">ROUTING...</span>
             </div>
           )}
-          {isFetchingRoute() && (
-            <div class="flex items-center gap-xs mb-xs">
-              <span class="material-symbols-outlined text-[14px] text-ice-blue animate-spin">route</span>
-              <span class="font-label-sm text-[9px] text-ice-blue uppercase tracking-[1px] animate-pulse">CALCULATING_ROUTE...</span>
-            </div>
-          )}
-          {routeError() && (
-            <div class="flex items-center gap-xs mb-xs">
-              <span class="material-symbols-outlined text-[14px] text-text-muted">error</span>
-              <span class="font-label-sm text-[9px] text-text-muted uppercase tracking-[1px]">{routeError()}</span>
-            </div>
-          )}
+
           <div class="bg-background border border-hairline p-sm flex items-center gap-xs">
             <span class="material-symbols-outlined text-on-surface-variant">
               {isSearching() ? "sync" : "search"}
@@ -1125,12 +1107,10 @@ const MapPage: Component = () => {
         )}
       </div>
 
-      {/* Map Settings / Theme Switcher (Lowest Left of Map) */}
+      {/* Map Settings / Theme Switcher */}
       <div class="absolute bottom-container-margin left-container-margin z-20 flex flex-col items-start transition-all duration-300" style={{ left: `calc(${window.innerWidth >= 768 && showMobileResults() ? "420px" : "20px"})` }}>
-        {/* Compact Theme & Layer Selection Overlay */}
         {showThemePanel() && (
           <div class="mb-xs bg-surface border border-hairline p-sm flex flex-col gap-sm w-56 shadow-none rounded-none animate-fade-in">
-            {/* Theme Selector */}
             <div>
               <span class="font-label-sm text-[9px] text-text-muted px-xs uppercase border-b border-hairline pb-xs mb-xs block">MAP_THEME</span>
               <div class="flex gap-xs mt-xs">
@@ -1155,7 +1135,6 @@ const MapPage: Component = () => {
               </div>
             </div>
 
-            {/* Layer Visibility Settings */}
             <div>
               <span class="font-label-sm text-[9px] text-text-muted px-xs uppercase border-b border-hairline pb-xs mb-xs block">LAYER_SETTINGS</span>
               <div class="flex flex-col gap-xs mt-xs max-h-[180px] overflow-y-auto pr-xs">
@@ -1180,7 +1159,6 @@ const MapPage: Component = () => {
           </div>
         )}
 
-        {/* Settings Trigger Button */}
         <button 
           onClick={() => setShowThemePanel(!showThemePanel())}
           class="w-12 h-12 bg-surface border border-hairline flex items-center justify-center text-primary hover:bg-surface-soft transition-colors focus:outline-none focus:ring-1 focus:ring-primary"
@@ -1305,6 +1283,5 @@ const MapResult: Component<MapResultProps> = (props) => {
     </button>
   );
 };
-
 
 export default MapPage;

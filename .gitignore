@@ -29,8 +29,13 @@ gitignore
 .DS_Store
 Thumbs.db
 
+# Routing engine runtime data
+/graphhopper/data/*
+/graphhopper/*.jar
+/valhalla/data/*
+
 
 getdesign/
 
 
-AGENTS.md
+
