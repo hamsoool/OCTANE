@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getFuelPrices } from "../utils/fuelPrices.js";
+import { getFuelPrices, calculateStationPrices } from "../utils/fuelPrices.js";
 import { getRedis } from "../utils/redis.js";
 
 const router = Router();
@@ -140,15 +140,20 @@ router.get("/", async (req, res) => {
   }
 
   // 6. Enrich with fuel prices
-  const fuelPrices = await getFuelPrices();
-  const preferredGrade = (process.env.DOE_PREFERRED_GRADE ?? "ron91") as keyof typeof fuelPrices;
+  const { pumpPrices, adjustments } = await getFuelPrices();
+  const preferredGrade = (process.env.DOE_PREFERRED_GRADE ?? "ron91") as "ron91" | "ron95" | "ron97" | "diesel";
 
   const enriched = stations.map((s: any) => {
+    const lat = s.coordinates[1];
+    const stationPrices = calculateStationPrices(s.brand, lat, pumpPrices, adjustments, parseInt(s.id, 10));
+
     const primaryPrice =
-      (fuelPrices[preferredGrade] ?? fuelPrices.ron91 ?? fuelPrices.diesel) ||
+      stationPrices[preferredGrade] ??
+      stationPrices.ron91 ??
+      stationPrices.diesel ??
       getSeededPrice(parseInt(s.id, 10), s.brand);
 
-    const gradeLabel = fuelPrices[preferredGrade]
+    const gradeLabel = stationPrices[preferredGrade]
       ? preferredGrade.toUpperCase().replace("RON", "RON_")
       : "ESTIMATED";
 
@@ -160,10 +165,10 @@ router.get("/", async (req, res) => {
       price: primaryPrice,
       priceGrade: gradeLabel,
       fuelData: {
-        diesel: fuelPrices.diesel,
-        ron91: fuelPrices.ron91,
-        ron95: fuelPrices.ron95,
-        ron97: fuelPrices.ron97,
+        diesel: stationPrices.diesel,
+        ron91: stationPrices.ron91,
+        ron95: stationPrices.ron95,
+        ron97: stationPrices.ron97,
       },
       coordinates: s.coordinates,
     };

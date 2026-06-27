@@ -56,7 +56,7 @@ Uses `@solidjs/router` (v0.16) with nested route definitions in `App.tsx`.
 - `POST /api/auth/logout` clears the session cookie.
 - `GET /api/auth/me` returns current user info from cookie session (requires valid JWT cookie).
 - Rate limiting via Upstash Redis using `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` env vars.
-- **DOE Fuel Prices:** `server/src/utils/fuelPrices.ts` fetches live prices from the soul-scraper API (`DOE_API_URL` env var, default: `https://soul-scaper.onrender.com`). Parses North Luzon Pump Price PDFs and caches results for 6 hours. The preferred display grade is set via `DOE_PREFERRED_GRADE` (default: `ron91`).
+- **DOE Fuel Prices:** `server/src/utils/fuelPrices.ts` fetches live pump prices and price adjustments from the soul-scraper API. It applies the latest adjustments based on the brand of each gas station (matching Olongapo City and Subic specifically) and caches the combined results in Redis for 24 hours. The preferred display grade is set via `DOE_PREFERRED_GRADE` (default: `ron91`).
 
 ### Project Structure
 - `src/App.tsx`: Main entry and routing shell.
@@ -68,12 +68,12 @@ Uses `@solidjs/router` (v0.16) with nested route definitions in `App.tsx`.
   - `server/src/index.ts`: Server entry point.
   - `server/src/models/User.ts`: Mongoose User model with bcrypt hashing, AES-256-GCM encrypted userId.
   - `server/src/routes/auth.ts`: Auth routes (POST /api/auth/signin, POST /api/auth/register, POST /api/auth/verify, POST /api/auth/logout, GET /api/auth/me).
-  - `server/src/routes/stations.ts`: Overpass API fuel stations with live DOE prices. Uses Upstash Redis (`stations:zambales`, 24h TTL) as primary cache; in-memory fallback (1h TTL) when Redis is unavailable. Fetches real prices from `fuelPrices.ts` and attaches `brand`, `preferredGrade`, `price`, `priceGrade`, and `fuelData` (diesel/ron91/ron95/ron97) to each station. Falls back to seeded pricing if DOE data is unavailable. No `status` field.
+  - `server/src/routes/stations.ts`: Overpass API fuel stations with live DOE prices. Uses Upstash Redis (`stations:zambales`, 24h TTL) as primary cache; in-memory fallback (1h TTL) when Redis is unavailable. Calculates station-specific fuel prices using `calculateStationPrices` from `fuelPrices.ts` and attaches `brand`, `preferredGrade`, `price`, `priceGrade`, and `fuelData` (diesel/ron91/ron95/ron97) to each station. Falls back to seeded pricing if DOE data is unavailable. No `status` field.
   - `server/src/middleware/auth.ts`: JWT authentication middleware. Reads token from `req.cookies.session`.
   - `server/src/utils/cipher.ts`: AES-256-GCM encrypt/decrypt utility.
   - `server/src/utils/email.ts`: Brevo transactional email sender with 2FA code template.
   - `server/src/utils/redis.ts`: Upstash Redis client singleton.
-  - `server/src/utils/fuelPrices.ts`: DOE fuel price fetcher and parser. Calls soul-scraper API with exponential backoff retry (3 attempts, 1s/2s/4s), parses North Luzon Pump Prices PDF text (common price column per grade), and caches results in Redis (`fuel:prices:north-luzon`, 24h TTL) with in-memory fallback (6h TTL).
+  - `server/src/utils/fuelPrices.ts`: DOE fuel price fetcher and parser. Calls soul-scraper API with exponential backoff retry (3 attempts, 1s/2s/4s), queries `/latest` to get the latest structured JSON pump prices and adjustments (falling back to searching past documents for the latest readable week if current pump prices PDF is scanned/empty), and provides `calculateStationPrices` to apply adjustments to base prices for each station brand. Caches results in Redis (`fuel:prices:north-luzon`, 24h TTL) with in-memory fallback (6h TTL).
   - `server/src/middleware/rateLimit.ts`: IP rate limit middleware (10 requests per 5 min).
 
 ### Auth Flow
