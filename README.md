@@ -10,7 +10,6 @@ Region-based fuel price intelligence and watchlist application. Track real-time 
 - **Authentication** — username/password login and registration with 6-digit OTP verification via email (Brevo), JWT session cookies, idle timeout logout, and role-based access (regular / admin)
 - **Dashboard** — regional price benchmarks, image carousel, and market trend indicators
 - **Admin Console** — operator directory, system stats, and audit trail access (admin only)
-- **Watchlist** — saved stations feed with live pricing, distance, and price delta tracking
 - **Station List** — terminal detail view with status badges, grade-level pricing, and geographic metadata
 - **Cookie Consent** — two-tier consent (necessary-only or all) with granular preference toggles synced to user profile
 - **Responsive Design** — mobile-first layout with collapsible sidebar, bottom navigation, desktop top navigation with settings dropdown
@@ -82,7 +81,7 @@ In production mode, Express serves the built frontend static files from `dist/`.
 
 ```
 src/
-  pages/        — Landing, AuthPage, Dashboard, AdminDashboard, MapPage, Watchlist, Stations
+  pages/        — Landing, AuthPage, Dashboard, AdminDashboard, MapPage, Stations
   components/   — AppLayout, TopNav, BottomNav, CookieConsent
   constants/    — mapThemes, navigation config
   services/     — geolocation

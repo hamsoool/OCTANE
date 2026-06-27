@@ -1,15 +1,19 @@
 import { createSignal, createEffect, onCleanup, type Component } from "solid-js";
-import { useNavigate } from "@solidjs/router";
+import { useNavigate, useLocation } from "@solidjs/router";
 import { Navigate } from "@solidjs/router";
 import { apiPost, setToken, getRole, getToken } from "../api";
 import { requestCookieConsent } from "../components/CookieConsent";
 
 const AuthPage: Component = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const token = getToken();
   if (token) {
     return <Navigate href={getRole() === "admin" ? "/admin" : "/dashboard"} />;
   }
+
+  const sessionExpired = location.query.reason === "timeout";
+  const [dismissed, setDismissed] = createSignal(false);
   const [username, setUsername] = createSignal("");
   const [email, setEmail] = createSignal("");
   const [password, setPassword] = createSignal("");
@@ -235,6 +239,28 @@ const AuthPage: Component = () => {
           "opacity-100 translate-y-0": isMounted(),
         }}
       >
+        {/* Session Expired Banner */}
+        {sessionExpired && !dismissed() && (
+          <div class="mb-lg p-md border border-ice-blue/30 bg-ice-blue/5 flex flex-col gap-sm">
+            <div class="flex items-center gap-sm">
+              <span class="material-symbols-outlined text-ice-blue text-lg">schedule</span>
+              <span class="font-headline-md text-headline-md text-ice-blue uppercase tracking-[2px]">
+                Session Expired
+              </span>
+            </div>
+            <p class="font-body-md text-text-body text-sm leading-relaxed">
+              Your session has been terminated due to inactivity. Please sign in to continue.
+            </p>
+            <button
+              type="button"
+              onClick={() => setDismissed(true)}
+              class="self-start font-label-sm text-[10px] text-text-muted uppercase tracking-[2px] hover:text-primary transition-colors mt-xs"
+            >
+              DISMISS
+            </button>
+          </div>
+        )}
+
         {/* Back Button */}
         <button
           type="button"

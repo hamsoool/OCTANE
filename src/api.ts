@@ -48,6 +48,22 @@ export async function apiPatch<T>(endpoint: string, body: Record<string, unknown
   }
 }
 
+export async function apiDelete<T>(endpoint: string): Promise<{ success: boolean; data?: T; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+      ...fetchOpts(),
+      method: "DELETE",
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.message || "Request failed." };
+    }
+    return { success: true, data };
+  } catch {
+    return { success: false, error: "Unable to reach the system. Check your connection." };
+  }
+}
+
 export async function apiGet<T>(endpoint: string): Promise<{ success: boolean; data?: T; error?: string }> {
   try {
     const res = await fetch(`${API_BASE}${endpoint}`, fetchOpts());

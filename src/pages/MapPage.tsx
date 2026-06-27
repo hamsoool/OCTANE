@@ -2,7 +2,8 @@ import { Component, createSignal, onMount, onCleanup, For, createEffect, untrack
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { MAP_THEMES, applyThemeStyle, toggleMapLayerVisibility } from "../constants/mapThemes";
-import { apiGet } from "../api";
+import { useSearchParams } from "@solidjs/router";
+import { apiGet, apiPost, apiDelete } from "../api";
 import { startWatching, stopWatching } from "../services/geolocation";
 import { DISTANCE_CONFIG, GPS_CONFIG } from "../constants/navigation";
 
@@ -153,6 +154,41 @@ const MapPage: Component = () => {
   const [isSearching, setIsSearching] = createSignal<boolean>(false);
   const [isMapInitializing, setIsMapInitializing] = createSignal<boolean>(true);
   const [allStations, setAllStations] = createSignal<Station[]>(initialStations);
+  const [searchParams] = useSearchParams();
+
+  // Saved stations
+  const [savedStationIds, setSavedStationIds] = createSignal<string[]>([]);
+
+  const fetchSavedStationIds = async () => {
+    const res = await apiGet<{ stationId: string }[]>("/saved-stations");
+    if (res.success && res.data) {
+      setSavedStationIds(res.data.map((s) => s.stationId));
+    }
+  };
+
+  const toggleSaveStation = async (station: Station) => {
+    const isSaved = savedStationIds().includes(station.id);
+    if (isSaved) {
+      const res = await apiDelete(`/saved-stations/${station.id}`);
+      if (res.success) {
+        setSavedStationIds((prev) => prev.filter((id) => id !== station.id));
+      }
+    } else {
+      const res = await apiPost("/saved-stations", {
+        stationId: station.id,
+        name: station.name,
+        brand: station.brand,
+        coordinates: station.coordinates,
+        preferredGrade: station.preferredGrade,
+        price: station.price,
+        priceGrade: station.priceGrade,
+        fuelData: station.fuelData,
+      });
+      if (res.success) {
+        setSavedStationIds((prev) => [...prev, station.id]);
+      }
+    }
+  };
 
   // Theme signals
   const [selectedTheme, setSelectedTheme] = createSignal<string>(
@@ -310,6 +346,7 @@ const MapPage: Component = () => {
     updateSyncTime();
 
     fetchOverpassStations();
+    fetchSavedStationIds();
 
     if (!mapContainer) return;
 
@@ -396,36 +433,52 @@ const MapPage: Component = () => {
       }).setHTML(`
         <div class="font-label-sm text-[10px] text-primary uppercase">
           <div class="flex justify-between items-center border-b border-hairline pb-xs mb-xs">
-            <span class="font-headline-md text-xs">${station.name}</span>
-            <span class="font-label-sm text-[9px] text-text-muted tracking-[1px]">${distKm} KM</span>
+            <span class="font-headline-md text-xs truncate mr-xs">${station.name.replaceAll("_", " ")}</span>
+            <span class="font-label-sm text-[11px] text-primary tracking-[1px]">${distKm} KM</span>
           </div>
           <div class="flex justify-between gap-md mb-xs">
-            <span class="text-text-muted">PRICE (APPROX):</span>
+            <span class="text-primary">PRICE (APPROX):</span>
             <span class="text-primary font-data-lg text-sm">~₱${station.price}</span>
           </div>
           ${station.fuelData ? `
-          <div class="flex justify-between gap-md mb-xs text-[9px]">
-            <span class="text-text-muted">${fuelLabel(station.brand, "diesel")}:</span>
+          <div class="flex justify-between gap-md mb-xs text-[11px]">
+            <span class="text-primary">${fuelLabel(station.brand, "diesel")}:</span>
             <span class="text-primary">${station.fuelData.diesel ?? "—"}</span>
           </div>
-          <div class="flex justify-between gap-md mb-xs text-[9px]">
-            <span class="text-text-muted">${fuelLabel(station.brand, "ron91")}:</span>
+          <div class="flex justify-between gap-md mb-xs text-[11px]">
+            <span class="text-primary">${fuelLabel(station.brand, "ron91")}:</span>
             <span class="text-primary">${station.fuelData.ron91 ?? "—"}</span>
           </div>
-          <div class="flex justify-between gap-md mb-xs text-[9px]">
-            <span class="text-text-muted">${fuelLabel(station.brand, "ron95")}:</span>
+          <div class="flex justify-between gap-md mb-xs text-[11px]">
+            <span class="text-primary">${fuelLabel(station.brand, "ron95")}:</span>
             <span class="text-primary">${station.fuelData.ron95 ?? "—"}</span>
           </div>
           ${String(station.brand ?? "").toLowerCase().includes("shell") ? `
-          <div class="flex justify-between gap-md mb-xs text-[9px]">
-            <span class="text-text-muted">${fuelLabel(station.brand, "ron97")}:</span>
+          <div class="flex justify-between gap-md mb-xs text-[11px]">
+            <span class="text-primary">${fuelLabel(station.brand, "ron97")}:</span>
             <span class="text-primary">${station.fuelData.ron97 ?? "—"}</span>
           </div>
           ` : ""}
           ` : ""}
-          <div class="text-[7px] text-text-muted opacity-50 mt-xs pt-xs border-t border-hairline text-center tracking-[1px]">* APPROXIMATE BASED ON AGGREGATED DATA</div>
+          <div class="flex justify-center mt-xs pt-xs border-t border-hairline">
+            <button class="save-station-btn font-label-sm text-[9px] uppercase tracking-[1px] text-ice-blue hover:text-primary transition-colors cursor-pointer" data-station-id="${station.id}">
+              ${savedStationIds().includes(station.id) ? 'REMOVE STATION' : 'SAVE STATION'}
+            </button>
+          </div>
         </div>
       `);
+
+      popup.on("open", () => {
+        const popupEl = popup.getElement();
+        if (popupEl) popupEl.style.zIndex = "1000";
+        const btn = popupEl?.querySelector(".save-station-btn");
+        if (btn) {
+          btn.addEventListener("click", (e: Event) => {
+            e.stopPropagation();
+            toggleSaveStation(station);
+          });
+        }
+      });
 
       const marker = new maplibregl.Marker({ element: el })
         .setLngLat(station.coordinates)
@@ -438,6 +491,29 @@ const MapPage: Component = () => {
         marker.togglePopup();
       }
     });
+  });
+
+  // Deep-link: select station from URL params (lat/lon)
+  let deepLinkHandled = false;
+  createEffect(() => {
+    const currentMap = map();
+    if (!currentMap || deepLinkHandled) return;
+    const stationList = allStations();
+    if (stationList.length === 0) return;
+    const lat = parseFloat(searchParams.lat);
+    const lon = parseFloat(searchParams.lon);
+    if (isNaN(lat) || isNaN(lon)) return;
+    deepLinkHandled = true;
+    let nearest = stationList[0];
+    let minDist = Infinity;
+    for (const s of stationList) {
+      const d = calculateDistance(lon, lat, s.coordinates[0], s.coordinates[1]);
+      if (d < minDist) { minDist = d; nearest = s; }
+    }
+    setTimeout(() => {
+      currentMap.flyTo({ center: nearest.coordinates, zoom: 15, essential: true });
+      selectStation(nearest);
+    }, 300);
   });
 
   // Selection Highlight Effect
@@ -907,7 +983,7 @@ const MapPage: Component = () => {
         <div class="p-container-margin border-b border-hairline bg-surface-soft">
           <div class="flex justify-between items-center mb-xs">
             <div>
-              <h2 class="font-headline-md text-headline-md uppercase tracking-wider mb-xs">NEARBY_UNITS</h2>
+              <h2 class="font-headline-md text-headline-md uppercase tracking-wider mb-xs">NEARBY STATIONS</h2>
               <p class="font-label-sm text-label-sm text-text-muted">SCANNING RADIUS: 5.0KM</p>
             </div>
           </div>
@@ -1020,7 +1096,7 @@ const MapPage: Component = () => {
           ) : stations().length === 0 ? (
             <div class="h-full flex flex-col items-center justify-center p-md text-center bg-surface-soft">
               <span class="material-symbols-outlined text-text-muted text-lg mb-xs">sensors_off</span>
-              <span class="font-label-sm text-label-sm text-text-muted uppercase tracking-[2px]">NO_UNITS_IN_RANGE</span>
+              <span class="font-label-sm text-label-sm text-text-muted uppercase tracking-[2px]">NO_STATIONS_IN_RANGE</span>
               <span class="font-label-sm text-[9px] text-text-muted opacity-40 uppercase tracking-[1px] mt-xs">PAN OR SEARCH ANOTHER SECTOR</span>
             </div>
           ) : (
@@ -1038,6 +1114,8 @@ const MapPage: Component = () => {
                   onClick={() => selectStation(station)}
                   fromOrigin={(station as any).fromOrigin}
                   useRoad={(station as any).useRoad}
+                  isSaved={savedStationIds().includes(station.id)}
+                  onToggleSave={() => toggleSaveStation(station)}
                 />
               )}
             </For>
@@ -1193,7 +1271,7 @@ const MapPage: Component = () => {
           aria-label="Open sidebar"
         >
           <span class="material-symbols-outlined text-lg">keyboard_arrow_right</span>
-          <span class="font-label-sm text-[8px] uppercase tracking-[1px]" style={{ "writing-mode": "vertical-rl" }}>UNITS</span>
+          <span class="font-label-sm text-[8px] uppercase tracking-[1px]" style={{ "writing-mode": "vertical-rl" }}>STATIONS</span>
         </button>
       </div>
     </div>
@@ -1212,6 +1290,8 @@ interface MapResultProps {
   onClick?: () => void;
   fromOrigin?: boolean;
   useRoad?: boolean;
+  isSaved?: boolean;
+  onToggleSave?: () => void;
 }
 
 const MapResult: Component<MapResultProps> = (props) => {
@@ -1224,52 +1304,64 @@ const MapResult: Component<MapResultProps> = (props) => {
       type="button"
     >
       <div class="flex justify-between items-start mb-sm">
-        <h3 class="font-headline-md text-headline-md leading-none">{props.name}</h3>
-        <div class="text-right">
-          <span class="font-data-lg text-data-lg text-primary">
-            ₱{props.price}
+        <h3 class="font-headline-md text-headline-md leading-none truncate mr-sm">{props.name.replaceAll("_", " ")}</h3>
+        <div class="flex items-start gap-sm">
+          <span
+            onClick={(e) => { e.stopPropagation(); props.onToggleSave?.(); }}
+            class="mt-1 transition-colors cursor-pointer focus:outline-none"
+            role="button"
+            aria-label={props.isSaved ? "Unsave station" : "Save station"}
+          >
+            <span class={`material-symbols-outlined text-sm ${props.isSaved ? "text-ice-blue" : "text-text-muted hover:text-primary"}`} style={{ "font-variation-settings": `'FILL' ${props.isSaved ? 1 : 0}` }}>
+              bookmark
+            </span>
           </span>
-          <div class="font-label-sm text-[9px] text-ice-blue uppercase tracking-[1px]">
-            APPROX
+          <div class="text-right">
+            <span class="font-data-lg text-data-lg text-primary">
+              ₱{props.price}
+            </span>
+            <div class="font-label-sm text-[10px] text-ice-blue uppercase tracking-[1px]">
+              APPROX
+            </div>
           </div>
         </div>
       </div>
       <div class="flex items-center gap-md">
         <div class="flex flex-col">
-          <span class="font-label-sm text-label-sm text-text-muted uppercase tracking-[1px] flex items-center gap-xs">
+          <span class="font-label-sm text-[11px] text-text-muted uppercase tracking-[1px] flex items-center gap-xs">
             DISTANCE
             {props.fromOrigin && (
-              <span class={`font-label-sm text-[7px] uppercase tracking-[1px] ${props.useRoad ? "text-ice-blue" : "text-text-muted opacity-40"}`}>
+              <span class={`font-label-sm text-[9px] uppercase tracking-[1px] ${props.useRoad ? "text-ice-blue" : "text-text-muted opacity-40"}`}>
                 [{props.useRoad ? "ROAD" : "LINEAR"}]
               </span>
             )}
           </span>
-          <span class="font-label-md text-label-md text-primary">{props.dist}</span>
+          <span class="font-data-lg text-data-lg text-primary">{props.dist}</span>
         </div>
         {props.fuelData && (
           <div class="ml-auto flex flex-col items-end gap-[2px]">
             {props.fuelData.diesel && (
               <div class="flex gap-xs">
-                <span class="font-label-sm text-[8px] text-text-muted uppercase">{fuelLabel(props.brand, "diesel")}</span>
-                <span class="font-label-sm text-[8px] text-primary">{props.fuelData.diesel}</span>
+                <span class="font-label-sm text-[11px] text-text-body uppercase">{fuelLabel(props.brand, "diesel")}</span>
+                <span class="font-label-sm text-[11px] text-primary">{props.fuelData.diesel}</span>
               </div>
             )}
             {props.fuelData.ron91 && (
               <div class="flex gap-xs">
-                <span class="font-label-sm text-[8px] text-text-muted uppercase">{fuelLabel(props.brand, "ron91")}</span>
-                <span class="font-label-sm text-[8px] text-primary">{props.fuelData.ron91}</span>
+                <span class="font-label-sm text-[11px] text-text-body uppercase">{fuelLabel(props.brand, "ron91")}</span>
+                <span class="font-label-sm text-[11px] text-primary">{props.fuelData.ron91}</span>
               </div>
             )}
             {props.fuelData.ron95 && (
               <div class="flex gap-xs">
-                <span class="font-label-sm text-[8px] text-text-muted uppercase">{fuelLabel(props.brand, "ron95")}</span>
-                <span class="font-label-sm text-[8px] text-primary">{props.fuelData.ron95}</span>
+                <span class="font-label-sm text-[11px] text-text-body uppercase">{fuelLabel(props.brand, "ron95")}</span>
+                <span class="font-label-sm text-[11px] text-primary">{props.fuelData.ron95}</span>
               </div>
             )}
             {props.fuelData.ron97 && props.brand?.toLowerCase().includes("shell") && (
               <div class="flex gap-xs">
-                <span class="font-label-sm text-[8px] text-text-muted uppercase">{fuelLabel(props.brand, "ron97")}</span>
-                <span class="font-label-sm text-[8px] text-primary">{props.fuelData.ron97}</span>
+                <span class="font-label-sm text-[11px] text-text-body uppercase">{fuelLabel(props.brand, "ron97")}</span>
+                <span class="font-label-sm text-[11px] text-primary">{props.fuelData.ron97}</span>
               </div>
             )}
           </div>

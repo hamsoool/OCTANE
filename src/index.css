@@ -157,6 +157,10 @@
   filter: invert(90%) hue-rotate(180deg) brightness(85%) contrast(110%) grayscale(100%);
 }
 
+.custom-telemetry-popup {
+  z-index: 1000 !important;
+}
+
 .custom-telemetry-popup .maplibregl-popup-content {
   background: #131313 !important;
   color: #ffffff !important;

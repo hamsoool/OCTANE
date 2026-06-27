@@ -4,14 +4,12 @@ import { getRole } from "../api";
 
 const regularItems: { href: string; icon: string; label: string }[] = [
   { href: "/dashboard", icon: "dashboard", label: "DASHBOARD" },
-  { href: "/watchlist", icon: "star", label: "WATCHLIST" },
   { href: "/map", icon: "map", label: "MAP" },
   { href: "/stations", icon: "ev_station", label: "STATIONS" },
 ];
 
 const adminItems: { href: string; icon: string; label: string }[] = [
   { href: "/admin", icon: "admin_panel_settings", label: "ADMIN" },
-  { href: "/watchlist", icon: "star", label: "WATCHLIST" },
   { href: "/map", icon: "map", label: "MAP" },
   { href: "/stations", icon: "ev_station", label: "STATIONS" },
 ];

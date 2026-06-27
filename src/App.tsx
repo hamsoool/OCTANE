@@ -5,7 +5,6 @@ import Landing from "./pages/Landing";
 import AuthPage from "./pages/AuthPage";
 import Dashboard from "./pages/Dashboard";
 import AdminDashboard from "./pages/AdminDashboard";
-import Watchlist from "./pages/Watchlist";
 import Stations from "./pages/Stations";
 import CookieConsent from "./components/CookieConsent";
 
@@ -22,9 +21,6 @@ const App: Component = () => {
         </Route>
         <Route path="/admin" component={AppLayout}>
           <Route path="/" component={AdminDashboard} />
-        </Route>
-        <Route path="/watchlist" component={AppLayout}>
-          <Route path="/" component={Watchlist} />
         </Route>
         <Route path="/map" component={AppLayout}>
           <Route path="/" component={MapPage} />

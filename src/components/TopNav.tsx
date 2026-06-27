@@ -4,14 +4,12 @@ import { getUsername, getRole, clearToken, apiPost } from "../api";
 
 const baseNavItems: { href: string; label: string; match: string }[] = [
   { href: "/dashboard", label: "DASHBOARD", match: "dashboard" },
-  { href: "/watchlist", label: "WATCHLIST", match: "watchlist" },
   { href: "/map", label: "MAP", match: "map" },
   { href: "/stations", label: "STATIONS", match: "stations" },
 ];
 
 const adminNavItems: { href: string; label: string; match: string }[] = [
   { href: "/admin", label: "ADMIN", match: "admin" },
-  { href: "/watchlist", label: "WATCHLIST", match: "watchlist" },
   { href: "/map", label: "MAP", match: "map" },
   { href: "/stations", label: "STATIONS", match: "stations" },
 ];
@@ -77,7 +75,7 @@ const TopNav: Component = () => {
           onClick={() => setMenuOpen(!menuOpen())}
           class="material-symbols-outlined text-primary p-2"
         >
-          settings
+          person
         </button>
         {menuOpen() && (
           <div class="absolute right-0 top-full mt-xs w-56 bg-surface-card border border-hairline p-md z-50">

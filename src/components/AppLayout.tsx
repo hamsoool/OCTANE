@@ -28,7 +28,7 @@ const AppLayout: Component<AppLayoutProps> = (props) => {
   const idleLogout = async () => {
     await apiPost("/auth/logout", {});
     clearToken();
-    navigate("/auth", { replace: true });
+    navigate("/auth?reason=timeout", { replace: true });
   };
 
   onMount(async () => {
