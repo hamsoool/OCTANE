@@ -13,8 +13,8 @@ let inMemoryCache: { stations: any[]; fetchedAt: number } | null = null;
 const IN_MEMORY_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 const cleanStationName = (rawName?: string, rawBrand?: string): string => {
-  const name = rawName || rawBrand || "UNNAMED_UNIT";
-  return name.trim().toUpperCase().replace(/[\s\-]+/g, "_");
+  const name = rawName || rawBrand || "UNNAMED UNIT";
+  return name.trim().toUpperCase().replace(/[\s\-]+/g, " ").replace(/\s+/g, " ");
 };
 
 const getSeededPrice = (osmId: number, brand?: string): string => {
@@ -142,6 +142,13 @@ router.get("/", async (req, res) => {
   // 6. Enrich with fuel prices
   const { pumpPrices, adjustments } = await getFuelPrices();
   const preferredGrade = (process.env.DOE_PREFERRED_GRADE ?? "ron91") as "ron91" | "ron95" | "ron97" | "diesel";
+
+  // Normalize underscores to spaces in cached names
+  stations = stations.map((s: any) => ({
+    ...s,
+    name: s.name.replace(/_/g, " "),
+    brand: s.brand?.replace(/_/g, " "),
+  }));
 
   const enriched = stations.map((s: any) => {
     const lat = s.coordinates[1];

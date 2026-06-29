@@ -236,7 +236,7 @@ const Stations: Component = () => {
                   <div class="flex flex-col md:flex-row md:items-center justify-between gap-md">
                     <div class="min-w-0 md:flex-1 md:basis-0">
                       <h2 class="font-headline-md text-headline-lg md:text-headline-xl text-primary uppercase tracking-[2px] leading-tight truncate">
-                        {s.name.replaceAll("_", " ")}
+                        {s.name}
                       </h2>
                       <span class="font-label-sm text-[10px] text-text-muted opacity-40 uppercase">
                         {new Date(s.savedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}

@@ -11,7 +11,11 @@ router.get("/", async (req: AuthRequest, res: Response) => {
     const stations = await SavedStation.find({ userId: req.user!.id })
       .sort({ savedAt: -1 })
       .lean();
-    res.json(stations);
+    res.json(stations.map((s) => ({
+      ...s,
+      name: s.name.replace(/_/g, " "),
+      brand: s.brand?.replace(/_/g, " "),
+    })));
   } catch (err) {
     console.error("Error fetching saved stations:", err);
     res.status(500).json({ message: "Failed to fetch saved stations." });
@@ -68,6 +72,51 @@ router.delete("/:stationId", async (req: AuthRequest, res: Response) => {
   } catch (err) {
     console.error("Error removing saved station:", err);
     res.status(500).json({ message: "Failed to remove saved station." });
+  }
+});
+
+// GET /top — most-saved stations across all users (with avg diesel price)
+router.get("/top", async (_req: AuthRequest, res: Response) => {
+  try {
+    const top = await SavedStation.aggregate([
+      { $match: { "fuelData.diesel": { $exists: true, $nin: [null, ""] } } },
+      {
+        $group: {
+          _id: "$stationId",
+          name: { $first: "$name" },
+          brand: { $first: "$brand" },
+          userIds: { $addToSet: "$userId" },
+          dieselPrices: { $push: { $toDouble: "$fuelData.diesel" } },
+          coordinates: { $first: "$coordinates" },
+        },
+      },
+      {
+        $addFields: {
+          userCount: { $size: "$userIds" },
+          avgDiesel: { $round: [{ $avg: "$dieselPrices" }, 2] },
+          name: { $replaceAll: { input: "$name", find: "_", replacement: " " } },
+          brand: { $cond: { if: { $ne: ["$brand", undefined] }, then: { $replaceAll: { input: "$brand", find: "_", replacement: " " } }, else: "$brand" } },
+        },
+      },
+      { $match: { avgDiesel: { $ne: null } } },
+      { $sort: { userCount: -1 } },
+      { $limit: 4 },
+      {
+        $project: {
+          _id: 0,
+          stationId: "$_id",
+          name: 1,
+          brand: 1,
+          userCount: 1,
+          avgDiesel: 1,
+          coordinates: 1,
+        },
+      },
+    ]);
+    res.json(top);
+  } catch (err) {
+    console.error("Error fetching top saved stations:", err);
+    res.status(500).json({ message: "Failed to fetch top saved stations." });
   }
 });
 

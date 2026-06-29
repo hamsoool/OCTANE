@@ -433,7 +433,7 @@ const MapPage: Component = () => {
       }).setHTML(`
         <div class="font-label-sm text-[10px] text-primary uppercase">
           <div class="flex justify-between items-center border-b border-hairline pb-xs mb-xs">
-            <span class="font-headline-md text-xs truncate mr-xs">${station.name.replaceAll("_", " ")}</span>
+            <span class="font-headline-md text-xs truncate mr-xs">${station.name}</span>
             <span class="font-label-sm text-[11px] text-primary tracking-[1px]">${distKm} KM</span>
           </div>
           <div class="flex justify-between gap-md mb-xs">
@@ -1040,7 +1040,7 @@ const MapPage: Component = () => {
                         onClick={() => selectStationSuggestion(item.station)}
                         class="w-full text-left p-xs border-b border-hairline last:border-b-0 hover:bg-surface-soft transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
                       >
-                        <p class="font-label-md text-[11px] text-primary uppercase tracking-[1px]">{item.station.name.replace(/_/g, " ")}</p>
+                        <p class="font-label-md text-[11px] text-primary uppercase tracking-[1px]">{item.station.name}</p>
                         <p class="font-label-sm text-[9px] text-text-muted uppercase tracking-[1px] mt-[1px]">{item.station.priceGrade ? `₱${item.station.price} ${item.station.priceGrade}` : "STATION"}</p>
                       </button>
                     );
@@ -1304,7 +1304,7 @@ const MapResult: Component<MapResultProps> = (props) => {
       type="button"
     >
       <div class="flex justify-between items-start mb-sm">
-        <h3 class="font-headline-md text-headline-md leading-none truncate mr-sm">{props.name.replaceAll("_", " ")}</h3>
+        <h3 class="font-headline-md text-headline-md leading-none truncate mr-sm">{props.name}</h3>
         <div class="flex items-start gap-sm">
           <span
             onClick={(e) => { e.stopPropagation(); props.onToggleSave?.(); }}
