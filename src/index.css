@@ -192,3 +192,43 @@
   animation: consent-in 0.3s ease-out;
 }
 
+/* Telemetry Marquee Scrolling for long station names on card hover */
+.marquee-container {
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+  display: block;
+}
+
+.marquee-scroller {
+  display: block;
+  width: 100%;
+  transform: translateX(0);
+  transition: transform 3s ease-in-out;
+}
+
+.marquee-text {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transform: translateX(0);
+  transition: transform 3s ease-in-out;
+}
+
+.group:hover .marquee-scroller {
+  transform: translateX(100%);
+}
+
+.group:hover .marquee-text {
+  display: inline-block;
+  min-width: 100%;
+  width: auto;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  transform: translateX(-100%);
+}
+

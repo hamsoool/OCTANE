@@ -87,6 +87,65 @@ out center;`;
   }
 }
 
+router.get("/trends", async (req, res) => {
+  try {
+    const { pumpPrices, adjustments, priorPumpPricesWeek, priorAdjustmentsWeek } = await getFuelPrices();
+    
+    const BRANDS = ["shell", "petron", "caltex", "seaoil", "total", "jetti", "phoenix", "cleanfuel"];
+    const CITIES: Array<"OLONGAPO CITY" | "SUBIC"> = ["OLONGAPO CITY", "SUBIC"];
+    const GRADES: Array<"diesel" | "ron91" | "ron95"> = ["diesel", "ron91", "ron95"];
+    
+    let currentSum = 0;
+    let priorSum = 0;
+    let count = 0;
+    
+    for (const brand of BRANDS) {
+      for (const city of CITIES) {
+        const lat = city === "OLONGAPO CITY" ? 14.83 : 14.88;
+        const osmId = 12345;
+        
+        const currentPrices = calculateStationPrices(brand, lat, pumpPrices, adjustments, osmId);
+        const priorPrices = calculateStationPrices(brand, lat, priorPumpPricesWeek || pumpPrices, priorAdjustmentsWeek || adjustments, osmId);
+        
+        for (const grade of GRADES) {
+          const curVal = parseFloat(currentPrices[grade] || "");
+          const priVal = parseFloat(priorPrices[grade] || "");
+          if (!isNaN(curVal) && !isNaN(priVal) && priVal > 0) {
+            currentSum += curVal;
+            priorSum += priVal;
+            count++;
+          }
+        }
+      }
+    }
+    
+    if (count === 0 || priorSum === 0) {
+      res.json({
+        amount: "0.00",
+        pct: "0.00",
+        direction: "stable",
+        formatted: "₱0.00 (0.00%)"
+      });
+      return;
+    }
+    
+    const avgCurrent = currentSum / count;
+    const avgPrior = priorSum / count;
+    const diff = avgCurrent - avgPrior;
+    const pct = (diff / avgPrior) * 100;
+    
+    res.json({
+      amount: Math.abs(diff).toFixed(2),
+      pct: Math.abs(pct).toFixed(2),
+      direction: diff > 0.005 ? "up" : diff < -0.005 ? "down" : "stable",
+      formatted: `${diff > 0.005 ? "+" : diff < -0.005 ? "-" : ""}₱${Math.abs(diff).toFixed(2)} (${Math.abs(pct).toFixed(2)}%)`
+    });
+  } catch (err) {
+    console.error("Error calculating trends:", err);
+    res.status(500).json({ message: "Failed to calculate trends." });
+  }
+});
+
 router.get("/", async (req, res) => {
   const redis = getRedis();
   let stations: any[] | null = null;

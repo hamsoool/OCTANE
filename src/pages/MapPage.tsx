@@ -500,8 +500,11 @@ const MapPage: Component = () => {
     if (!currentMap || deepLinkHandled) return;
     const stationList = allStations();
     if (stationList.length === 0) return;
-    const lat = parseFloat(searchParams.lat);
-    const lon = parseFloat(searchParams.lon);
+    const latParam = searchParams.lat;
+    const lonParam = searchParams.lon;
+    if (typeof latParam !== "string" || typeof lonParam !== "string") return;
+    const lat = parseFloat(latParam);
+    const lon = parseFloat(lonParam);
     if (isNaN(lat) || isNaN(lon)) return;
     deepLinkHandled = true;
     let nearest = stationList[0];
@@ -951,7 +954,7 @@ const MapPage: Component = () => {
   };
 
   return (
-    <div class="relative flex-grow flex overflow-hidden h-[calc(100vh-64px-64px)] md:h-[calc(100vh-64px)]">
+    <div class="relative flex-grow flex overflow-hidden h-[calc(100vh-64px)] md:h-screen">
       {/* Map Canvas */}
       <div class="absolute inset-0 z-0 bg-background">
         <div 
@@ -994,7 +997,7 @@ const MapPage: Component = () => {
                 ORIGIN: {userLocationMode() === "gps" ? (gpsWatchId !== null ? "GPS FIX (LIVE)" : "GPS FIX") : "PIN DROP"}
               </span>
               {gpsAccuracy() !== null && (
-                <span class="font-label-sm text-[7px] text-text-muted opacity-40 uppercase tracking-[1px]">±{Math.round(gpsAccuracy())}M</span>
+                <span class="font-label-sm text-[7px] text-text-muted opacity-40 uppercase tracking-[1px]">±{Math.round(gpsAccuracy()!)}M</span>
               )}
             </div>
           )}
@@ -1303,8 +1306,12 @@ const MapResult: Component<MapResultProps> = (props) => {
       }`}
       type="button"
     >
-      <div class="flex justify-between items-start mb-sm">
-        <h3 class="font-headline-md text-headline-md leading-none truncate mr-sm">{props.name}</h3>
+      <div class="flex justify-between items-start mb-sm min-w-0">
+        <div class="marquee-container mr-sm">
+          <div class="marquee-scroller">
+            <h3 class="marquee-text font-headline-md text-headline-md leading-none">{props.name}</h3>
+          </div>
+        </div>
         <div class="flex items-start gap-sm">
           <span
             onClick={(e) => { e.stopPropagation(); props.onToggleSave?.(); }}

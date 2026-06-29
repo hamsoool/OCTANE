@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onMount, onCleanup, type Component } from "solid-js";
+import { createSignal, createEffect, onMount, onCleanup, For, type Component } from "solid-js";
 import { apiGet } from "../api";
 
 const LOCATIONS = [
@@ -7,15 +7,55 @@ const LOCATIONS = [
   { image: "/CASTILLEJOS.png", name: "MUNICIPALITY OF CASTILLEJOS" },
 ];
 
+interface TopStation {
+  stationId: string;
+  name: string;
+  brand?: string;
+  userCount: number;
+  avgDiesel: number;
+  coordinates: [number, number];
+}
+
+interface TrendData {
+  amount: string;
+  pct: string;
+  direction: string;
+  formatted: string;
+}
+
 const Dashboard: Component = () => {
   const [currentImage, setCurrentImage] = createSignal(0);
   const [manilaTime, setManilaTime] = createSignal("");
   const [topStations, setTopStations] = createSignal<TopStation[]>([]);
+  const [trend, setTrend] = createSignal<TrendData | null>(null);
+
+  const [displayedName, setDisplayedName] = createSignal("");
+
+  createEffect(() => {
+    const name = LOCATIONS[currentImage()].name;
+    let currentText = "";
+    let currentIndex = 0;
+    setDisplayedName("");
+    const id = setInterval(() => {
+      if (currentIndex < name.length) {
+        currentText += name[currentIndex];
+        setDisplayedName(currentText);
+        currentIndex++;
+      } else {
+        clearInterval(id);
+      }
+    }, 60);
+    onCleanup(() => clearInterval(id));
+  });
 
   onMount(async () => {
     const res = await apiGet<TopStation[]>("/saved-stations/top");
     if (res.success && res.data) {
       setTopStations(res.data);
+    }
+    const trendRes = await apiGet<TrendData>("/stations/trends");
+    if (trendRes.success && trendRes.data) {
+      setTrend(trendRes.data);
     }
   });
 
@@ -30,6 +70,13 @@ const Dashboard: Component = () => {
     onCleanup(() => clearInterval(id));
   });
 
+  createEffect(() => {
+    const id = setInterval(() => {
+      setCurrentImage((i) => (i === LOCATIONS.length - 1 ? 0 : i + 1));
+    }, 12000);
+    onCleanup(() => clearInterval(id));
+  });
+
   const prevImage = () => setCurrentImage((i) => (i === 0 ? LOCATIONS.length - 1 : i - 1));
   const nextImage = () => setCurrentImage((i) => (i === LOCATIONS.length - 1 ? 0 : i + 1));
 
@@ -38,11 +85,19 @@ const Dashboard: Component = () => {
       {/* Hero Section */}
       <section class="relative w-full h-[600px] md:h-[716px] flex items-end overflow-hidden">
         <div class="absolute inset-0 z-0">
-          <div
-            class="w-full h-full bg-cover bg-center transition-all duration-700"
-            style={`background-image: url('${LOCATIONS[currentImage()].image}')`}
-          ></div>
-          <div class="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-transparent"></div>
+          <For each={LOCATIONS}>
+            {(loc: { image: string; name: string }, idx: () => number) => (
+              <div
+                class="absolute inset-0 bg-cover bg-center transition-opacity duration-[2000ms] ease-in-out"
+                style={{
+                  "background-image": `url('${loc.image}')`,
+                  opacity: currentImage() === idx() ? 1 : 0,
+                  "z-index": currentImage() === idx() ? 1 : 0,
+                }}
+              ></div>
+            )}
+          </For>
+          <div class="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-transparent z-10"></div>
         </div>
 
         {/* Left Arrow */}
@@ -67,9 +122,9 @@ const Dashboard: Component = () => {
 
         <div class="relative z-10 px-container-margin pb-lg w-full max-w-screen-2xl mx-auto">
           <div class="flex flex-col gap-xs">
-            <span class="font-label-md text-label-md text-primary tracking-[4px] uppercase opacity-60">Status: Real-Time</span>
             <h1 class="font-headline-lg md:font-headline-xl text-headline-lg md:text-headline-xl text-primary max-w-2xl leading-tight md:leading-none uppercase md:whitespace-nowrap">
-              {LOCATIONS[currentImage()].name}
+              {displayedName()}
+              <span class="animate-pulse text-ice-blue select-none ml-1">_</span>
             </h1>
           </div>
         </div>
@@ -92,18 +147,34 @@ const Dashboard: Component = () => {
         }
       `}</style>
 
-      {/* Global Trend Indicator */}
+      {/* Regional Trend Indicator */}
       <section class="px-container-margin py-6 md:py-section-gap w-full max-w-screen-2xl mx-auto">
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-hairline-strong pb-md gap-md">
           <div>
-            <h2 class="font-label-md text-label-md text-text-muted uppercase tracking-[2.5px] mb-xs">Global Market Trend</h2>
+            <h2 class="font-label-md text-label-md text-text-muted uppercase tracking-[2.5px] mb-xs">Weekly Trend (All Grades)</h2>
             <div class="flex items-baseline gap-sm">
-              <span class="font-data-lg text-[48px] text-primary leading-none tracking-tighter">-$0.12</span>
-              <span class="font-label-sm text-label-sm text-secondary bg-secondary-container px-2 py-1 uppercase">Price Down</span>
+              <span class="font-data-lg text-[36px] md:text-[48px] text-primary leading-none tracking-tighter">
+                {trend() ? `${trend()!.direction === "down" ? "-" : trend()!.direction === "up" ? "+" : ""}₱${trend()!.amount}` : "—"}
+              </span>
+              {trend() && (
+                <span
+                  classList={{
+                    "font-label-sm text-label-sm px-2 py-1 uppercase flex items-center gap-xs": true,
+                    "text-ice-blue bg-secondary-container": trend()!.direction === "down",
+                    "text-red-400 bg-error-container": trend()!.direction === "up",
+                    "text-text-muted bg-surface-soft": trend()!.direction === "stable",
+                  }}
+                >
+                  <span class="material-symbols-outlined text-sm">
+                    {trend()!.direction === "up" ? "trending_up" : trend()!.direction === "down" ? "trending_down" : "trending_flat"}
+                  </span>
+                  {trend()!.direction === "up" ? "+" : trend()!.direction === "down" ? "-" : ""}{trend()!.pct}%
+                </span>
+              )}
             </div>
           </div>
           <div class="flex flex-col gap-unit text-right">
-            <span class="font-label-sm text-label-sm text-text-muted uppercase">Manila Time</span>
+            <span class="font-label-sm text-label-sm text-text-muted uppercase">Philippine Time</span>
             <span class="font-data-lg text-data-lg text-primary uppercase">{manilaTime()}</span>
           </div>
         </div>
@@ -123,6 +194,8 @@ const Dashboard: Component = () => {
               name={s.name}
               brand={s.brand ?? s.name}
               avgDiesel={s.avgDiesel}
+              pct={s.pct}
+              direction={s.direction}
             />
           ))}
         </div>
@@ -139,23 +212,59 @@ interface TopStation {
   userCount: number;
   avgDiesel: number;
   coordinates: [number, number];
+  pct?: string;
+  direction?: string;
 }
 
 interface StationCardProps {
   name: string;
   brand: string;
   avgDiesel: number;
+  pct?: string;
+  direction?: string;
 }
 
 const StationCard: Component<StationCardProps> = (props) => {
+  const isIncrease = () => props.direction === "up";
+  const isDecrease = () => props.direction === "down";
+
   return (
-    <div class="p-lg bg-surface-soft border-r border-b border-hairline hover:bg-surface-card transition-colors group">
-      <div class="flex justify-between items-start mb-md">
-        <span class="font-label-md text-label-md text-text-muted uppercase tracking-[2.5px] truncate mr-2">{props.name}</span>
-        <span class="material-symbols-outlined text-text-muted group-hover:text-primary transition-colors text-[18px]">local_gas_station</span>
+    <div class="p-lg bg-surface-soft border-r border-b border-hairline hover:bg-surface-card transition-colors group flex flex-col justify-between">
+      <div class="flex justify-between items-center w-full mb-lg min-w-0">
+        <div class="marquee-container mr-2">
+          <div class="marquee-scroller">
+            <span class="marquee-text font-label-md text-[18px] md:text-[22px] text-primary uppercase tracking-[2px]">{props.name}</span>
+          </div>
+        </div>
+        <span class="material-symbols-outlined text-text-muted group-hover:text-primary transition-colors text-[24px] shrink-0">local_gas_station</span>
       </div>
-      <div class="font-data-lg text-[48px] text-primary leading-none tracking-tighter mb-unit">₱{props.avgDiesel.toFixed(2)}</div>
-      <span class="font-label-sm text-label-sm text-text-muted uppercase">AVG DIESEL</span>
+      <div class="flex items-center justify-between w-full">
+        <div class="flex flex-col gap-xs">
+          <span class="font-data-lg text-[32px] md:text-[40px] text-primary leading-none">
+            ₱{props.avgDiesel.toFixed(2)}
+          </span>
+          <span class="font-label-sm text-[10px] text-text-muted uppercase tracking-[2px]">AVG DIESEL</span>
+        </div>
+        {props.pct && props.pct !== "0.00" && (
+          <div class="flex flex-col items-center gap-unit">
+            <span
+              classList={{
+                "font-label-sm text-[11px] inline-flex items-center justify-center gap-xs px-xs py-[2px] rounded-none border": true,
+                "text-ice-blue border-ice-blue/20 bg-ice-blue/5": isDecrease(),
+                "text-red-400 border-red-400/20 bg-red-400/5": isIncrease(),
+              }}
+            >
+              <span class="material-symbols-outlined text-[14px]">
+                {isIncrease() ? "trending_up" : isDecrease() ? "trending_down" : "remove"}
+              </span>
+              {props.pct}%
+            </span>
+            <span class="font-label-sm text-[9px] text-text-muted opacity-60 uppercase tracking-[1px] text-center">
+              VS LAST WEEK
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

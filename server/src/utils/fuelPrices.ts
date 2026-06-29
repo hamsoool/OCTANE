@@ -10,6 +10,10 @@ export interface FuelGradePrices {
 export interface EnrichedPrices {
   pumpPrices: any;
   adjustments: any;
+  priorPumpPricesWeek?: any;
+  priorAdjustmentsWeek?: any;
+  priorPumpPricesMonth?: any;
+  priorAdjustmentsMonth?: any;
 }
 
 interface CacheEntry {
@@ -18,7 +22,7 @@ interface CacheEntry {
 }
 
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours (in-memory fallback)
-const REDIS_FUEL_KEY = "fuel:prices:north-luzon";
+const REDIS_FUEL_KEY = "fuel:prices:north-luzon:v3";
 const REDIS_FUEL_TTL_SEC = 86400; // 24 hours
 
 let cache: CacheEntry | null = null;
@@ -176,55 +180,28 @@ export async function getFuelPrices(): Promise<EnrichedPrices> {
   // 3. Fetch from soul-scraper API
   let pumpPrices: any = null;
   let adjustments: any = null;
+  
+  let priorPumpPricesWeek: any = null;
+  let priorAdjustmentsWeek: any = null;
+  
+  let priorPumpPricesMonth: any = null;
+  let priorAdjustmentsMonth: any = null;
 
   try {
     const apiKey = getApiKey();
     const apiUrl = getApiUrl();
-    // 3a. Fetch /latest to get the newest document IDs
-    const latestRes = await fetchWithRetry(`${apiUrl}/latest`, {
-      signal: AbortSignal.timeout(15000),
-      headers: { "X-API-Key": apiKey }
-    });
-    
-    if (latestRes.ok) {
-      const latestDocs: Array<{ id: number; source_category: string; title: string }> = await latestRes.json();
-      for (const doc of latestDocs) {
-        try {
-          const detailRes = await fetchWithRetry(`${apiUrl}/documents/${doc.id}`, {
-            signal: AbortSignal.timeout(15000),
-            headers: { "X-API-Key": apiKey }
-          });
-          if (!detailRes.ok) continue;
-          const detail: { content?: string } = await detailRes.json();
-          const content = detail.content?.trim() ?? "";
-          
-          if (doc.source_category === "Price Adjustments") {
-            if (content.startsWith("{")) {
-              adjustments = JSON.parse(content);
-              console.log(`[fuelPrices] Loaded adjustments from doc ${doc.id}`);
-            }
-          } else if (doc.source_category === "North Luzon Pump Prices") {
-            if (content.startsWith("{")) {
-              pumpPrices = JSON.parse(content);
-              console.log(`[fuelPrices] Loaded pump prices from doc ${doc.id}`);
-            }
-          }
-        } catch (e) {
-          console.warn(`[fuelPrices] Error fetching details for doc ${doc.id}:`, e);
-        }
-      }
-    }
-    
-    // 3b. Fallback: If pumpPrices is not loaded (e.g. latest was scanned/empty),
-    // loop through previous documents to find the first one containing valid JSON.
-    if (!pumpPrices) {
-      console.log("[fuelPrices] Latest pump prices document not readable, searching past documents...");
-      const listRes = await fetchWithRetry(
-        `${apiUrl}/documents?category=North%20Luzon%20Pump%20Prices&limit=20`,
+
+    const dateToPrices: Record<string, any> = {};
+    const dateToAdjustments: Record<string, any> = {};
+
+    // 3a. Fetch Price Adjustments history (limit 12)
+    try {
+      const adjListRes = await fetchWithRetry(
+        `${apiUrl}/documents?category=Price%20Adjustments&limit=12`,
         { signal: AbortSignal.timeout(15000), headers: { "X-API-Key": apiKey } }
       );
-      if (listRes.ok) {
-        const docs: Array<{ id: number; title: string }> = await listRes.json();
+      if (adjListRes.ok) {
+        const docs: Array<{ id: number; published_date?: string; title: string }> = await adjListRes.json();
         for (const doc of docs) {
           try {
             const detailRes = await fetchWithRetry(`${apiUrl}/documents/${doc.id}`, {
@@ -235,20 +212,127 @@ export async function getFuelPrices(): Promise<EnrichedPrices> {
             const detail: { content?: string } = await detailRes.json();
             const content = detail.content?.trim() ?? "";
             if (content.startsWith("{")) {
-              pumpPrices = JSON.parse(content);
-              console.log(`[fuelPrices] Fallback: Loaded pump prices from doc ${doc.id} "${doc.title}"`);
-              break;
+              const parsed = JSON.parse(content);
+              const dStr = doc.published_date ? doc.published_date.substring(0, 10) : "";
+              if (dStr) {
+                dateToAdjustments[dStr] = parsed;
+              }
             }
-          } catch (innerErr) {
-            console.warn(`[fuelPrices] Fallback search failed to load doc ${doc.id}:`, innerErr);
+          } catch (e) {
+            console.warn(`[fuelPrices] Error loading adjustments doc ${doc.id}:`, e);
           }
         }
       }
+    } catch (err) {
+      console.error("[fuelPrices] Failed to fetch adjustments history:", err);
+    }
+
+    // 3b. Fetch North Luzon Pump Prices history (limit 12)
+    try {
+      const nlListRes = await fetchWithRetry(
+        `${apiUrl}/documents?category=North%20Luzon%20Pump%20Prices&limit=12`,
+        { signal: AbortSignal.timeout(15000), headers: { "X-API-Key": apiKey } }
+      );
+      if (nlListRes.ok) {
+        const docs: Array<{ id: number; published_date?: string; title: string }> = await nlListRes.json();
+        for (const doc of docs) {
+          try {
+            const detailRes = await fetchWithRetry(`${apiUrl}/documents/${doc.id}`, {
+              signal: AbortSignal.timeout(15000),
+              headers: { "X-API-Key": apiKey }
+            });
+            if (!detailRes.ok) continue;
+            const detail: { content?: string } = await detailRes.json();
+            const content = detail.content?.trim() ?? "";
+            if (content.startsWith("{")) {
+              const parsed = JSON.parse(content);
+              const dStr = doc.published_date ? doc.published_date.substring(0, 10) : "";
+              if (dStr) {
+                dateToPrices[dStr] = parsed;
+              }
+            }
+          } catch (e) {
+            console.warn(`[fuelPrices] Error loading pump prices doc ${doc.id}:`, e);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[fuelPrices] Failed to fetch pump prices history:", err);
+    }
+
+    // Helper function to find the nearest adjustments for a date in dateToAdjustments
+    const findNearestAdjustments = (dateStr: string): any => {
+      if (dateToAdjustments[dateStr]) return dateToAdjustments[dateStr];
+      const targetTime = new Date(dateStr).getTime();
+      let nearestAdj = null;
+      let minDiff = Infinity;
+      for (const [key, val] of Object.entries(dateToAdjustments)) {
+        const diff = Math.abs(new Date(key).getTime() - targetTime);
+        if (diff < minDiff) {
+          minDiff = diff;
+          nearestAdj = val;
+        }
+      }
+      return nearestAdj;
+    };
+
+    // Group them into weekly entries sorted descending
+    const allDates = Array.from(new Set([
+      ...Object.keys(dateToPrices),
+      ...Object.keys(dateToAdjustments)
+    ])).sort((a, b) => b.localeCompare(a)); // Descending
+
+    const catalog: Array<{ date: string; pumpPrices: any; adjustments: any }> = [];
+    for (const dStr of allDates) {
+      const pPrices = dateToPrices[dStr] || null;
+      const adjs = findNearestAdjustments(dStr);
+      if (pPrices || adjs) {
+        catalog.push({
+          date: dStr,
+          pumpPrices: pPrices,
+          adjustments: adjs
+        });
+      }
+    }
+
+    // Now populate current, weekly, and monthly trends
+    if (catalog.length > 0) {
+      pumpPrices = catalog[0].pumpPrices;
+      adjustments = catalog[0].adjustments;
     }
     
-    // If we managed to load either pumpPrices or adjustments, cache it
+    if (catalog.length > 1) {
+      priorPumpPricesWeek = catalog[1].pumpPrices;
+      priorAdjustmentsWeek = catalog[1].adjustments;
+    } else if (catalog.length > 0) {
+      priorPumpPricesWeek = catalog[0].pumpPrices;
+      priorAdjustmentsWeek = catalog[0].adjustments;
+    }
+
+    if (catalog.length > 4) {
+      priorPumpPricesMonth = catalog[4].pumpPrices;
+      priorAdjustmentsMonth = catalog[4].adjustments;
+    } else if (catalog.length > 0) {
+      priorPumpPricesMonth = catalog[catalog.length - 1].pumpPrices;
+      priorAdjustmentsMonth = catalog[catalog.length - 1].adjustments;
+    }
+
+    // Ensure non-null prior fallbacks
+    priorPumpPricesWeek = priorPumpPricesWeek || pumpPrices;
+    priorAdjustmentsWeek = priorAdjustmentsWeek || adjustments;
+    priorPumpPricesMonth = priorPumpPricesMonth || pumpPrices;
+    priorAdjustmentsMonth = priorAdjustmentsMonth || adjustments;
+
+    // Cache the result
     if (pumpPrices || adjustments) {
-      const result: EnrichedPrices = { pumpPrices, adjustments };
+      const result: EnrichedPrices = {
+        pumpPrices,
+        adjustments,
+        priorPumpPricesWeek,
+        priorAdjustmentsWeek,
+        priorPumpPricesMonth,
+        priorAdjustmentsMonth
+      };
       cache = { prices: result, fetchedAt: now };
       
       if (redis) {
@@ -266,7 +350,14 @@ export async function getFuelPrices(): Promise<EnrichedPrices> {
     return cache.prices;
   }
 
-  return { pumpPrices: null, adjustments: null };
+  return {
+    pumpPrices: null,
+    adjustments: null,
+    priorPumpPricesWeek: null,
+    priorAdjustmentsWeek: null,
+    priorPumpPricesMonth: null,
+    priorAdjustmentsMonth: null
+  };
 }
 
 /**

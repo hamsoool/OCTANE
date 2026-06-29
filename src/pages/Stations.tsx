@@ -17,6 +17,18 @@ interface SavedStation {
     ron95?: string;
     ron97?: string;
   };
+  priorFuelDataWeek?: {
+    diesel?: string;
+    ron91?: string;
+    ron95?: string;
+    ron97?: string;
+  };
+  priorFuelDataMonth?: {
+    diesel?: string;
+    ron91?: string;
+    ron95?: string;
+    ron97?: string;
+  };
   savedAt: string;
 }
 
@@ -116,6 +128,7 @@ const Stations: Component = () => {
   const [stations, setStations] = createSignal<SavedStation[]>([]);
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
+  const [comparePeriod, setComparePeriod] = createSignal<"weekly" | "monthly">("weekly");
 
   const fetchSaved = async () => {
     setLoading(true);
@@ -143,21 +156,65 @@ const Stations: Component = () => {
   };
 
   const getAverage = (grade: "diesel" | "ron91" | "ron95") => {
+    const priorKey = comparePeriod() === "weekly" ? "priorFuelDataWeek" : "priorFuelDataMonth";
     const activeStations = stations().filter(
-      (s) => s.fuelData && s.fuelData[grade] && !isNaN(parseFloat(s.fuelData[grade]!))
+      (s) => s.fuelData && s.fuelData[grade] && !isNaN(parseFloat(s.fuelData[grade]!)) &&
+             s[priorKey] && s[priorKey]![grade] && !isNaN(parseFloat(s[priorKey]![grade]!))
     );
     if (activeStations.length === 0) return null;
     const sum = activeStations.reduce((acc, s) => acc + parseFloat(s.fuelData![grade]!), 0);
     return (sum / activeStations.length).toFixed(2);
   };
 
+  const getPriorAverage = (grade: "diesel" | "ron91" | "ron95") => {
+    const priorKey = comparePeriod() === "weekly" ? "priorFuelDataWeek" : "priorFuelDataMonth";
+    const activeStations = stations().filter(
+      (s) => s.fuelData && s.fuelData[grade] && !isNaN(parseFloat(s.fuelData[grade]!)) &&
+             s[priorKey] && s[priorKey]![grade] && !isNaN(parseFloat(s[priorKey]![grade]!))
+    );
+    if (activeStations.length === 0) return null;
+    const sum = activeStations.reduce((acc, s) => acc + parseFloat(s[priorKey]![grade]!), 0);
+    return (sum / activeStations.length).toFixed(2);
+  };
+
+  const getChangeDetails = (grade: "diesel" | "ron91" | "ron95") => {
+    const current = parseFloat(getAverage(grade) || "");
+    const prior = parseFloat(getPriorAverage(grade) || "");
+    if (isNaN(current) || isNaN(prior) || prior === 0) return null;
+
+    const pct = ((current - prior) / prior) * 100;
+    const isIncrease = pct > 0.005;
+    const isDecrease = pct < -0.005;
+
+    return {
+      pct: Math.abs(pct).toFixed(2),
+      isIncrease,
+      isDecrease,
+    };
+  };
+
   return (
     <div class="px-container-margin py-lg max-w-screen-2xl mx-auto">
-      <section class="mb-lg">
-        <h1 class="font-headline-lg text-headline-lg text-primary uppercase mb-xs">SAVED STATIONS</h1>
-        <p class="font-label-sm text-label-sm text-text-muted uppercase">
-          {loading() ? "LOADING..." : `${stations().length} STATION${stations().length !== 1 ? "S" : ""} SAVED`}
-        </p>
+      <section class="mb-lg flex flex-col md:flex-row md:justify-between md:items-end gap-md">
+        <div>
+          <h1 class="font-headline-lg text-headline-lg text-primary uppercase mb-xs">SAVED STATIONS</h1>
+          <p class="font-label-sm text-label-sm text-text-muted uppercase">
+            {loading() ? "LOADING..." : `${stations().length} STATION${stations().length !== 1 ? "S" : ""} SAVED`}
+          </p>
+        </div>
+        {!loading() && stations().length > 0 && (
+          <div class="flex items-center gap-xs">
+            <span class="font-label-sm text-label-sm text-text-muted uppercase tracking-[1px]">COMPARE:</span>
+            <select
+              value={comparePeriod()}
+              onChange={(e) => setComparePeriod(e.currentTarget.value as "weekly" | "monthly")}
+              class="bg-surface border border-hairline font-label-sm text-label-sm text-primary uppercase py-xs px-sm focus:outline-none tracking-[1px] cursor-pointer"
+            >
+              <option value="weekly" class="bg-surface text-primary">WEEKLY TREND</option>
+              <option value="monthly" class="bg-surface text-primary">MONTHLY TREND</option>
+            </select>
+          </div>
+        )}
       </section>
 
       {loading() ? (
@@ -192,38 +249,98 @@ const Stations: Component = () => {
           {/* Average Cards Grid */}
           <div class="grid grid-cols-1 md:grid-cols-3 gap-md mb-xl">
             {/* Diesel Card */}
-            <div class="border border-hairline p-md bg-surface-card flex flex-col justify-between min-h-[110px]">
-              <div class="flex items-baseline">
-                <span class="font-data-lg text-[36px] md:text-[48px] text-primary leading-none">
-                  {getAverage("diesel") ? `₱${getAverage("diesel")}` : "—"}
-                </span>
-              </div>
-              <div>
-                <span class="font-label-sm text-[10px] text-text-muted uppercase tracking-[2px]">AVG. DIESEL</span>
+            <div class="border border-hairline p-md bg-surface-card flex flex-col justify-center min-h-[110px]">
+              <div class="flex items-center justify-between">
+                <div class="flex flex-col gap-xs">
+                  <span class="font-data-lg text-[32px] md:text-[40px] text-primary leading-none">
+                    {getAverage("diesel") ? `₱${getAverage("diesel")}` : "—"}
+                  </span>
+                  <span class="font-label-sm text-[10px] text-text-muted uppercase tracking-[2px]">AVG. DIESEL</span>
+                </div>
+                {getChangeDetails("diesel") && (
+                  <div class="flex flex-col items-center gap-unit">
+                    <span
+                      classList={{
+                        "font-label-sm text-[11px] inline-flex items-center justify-center gap-xs px-xs py-[2px] rounded-none border": true,
+                        "text-ice-blue border-ice-blue/20 bg-ice-blue/5": getChangeDetails("diesel")!.isDecrease,
+                        "text-red-400 border-red-400/20 bg-red-400/5": getChangeDetails("diesel")!.isIncrease,
+                        "text-text-muted border-hairline bg-surface": !getChangeDetails("diesel")!.isIncrease && !getChangeDetails("diesel")!.isDecrease,
+                      }}
+                    >
+                      <span class="material-symbols-outlined text-[14px]">
+                        {getChangeDetails("diesel")!.isIncrease ? "trending_up" : getChangeDetails("diesel")!.isDecrease ? "trending_down" : "remove"}
+                      </span>
+                      {getChangeDetails("diesel")!.pct}%
+                    </span>
+                    <span class="font-label-sm text-[9px] text-text-muted opacity-60 uppercase tracking-[1px] text-center">
+                      VS {comparePeriod() === "weekly" ? "LAST WEEK" : "LAST MONTH"}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* RON 91 Card */}
-            <div class="border border-hairline p-md bg-surface-card flex flex-col justify-between min-h-[110px]">
-              <div class="flex items-baseline">
-                <span class="font-data-lg text-[36px] md:text-[48px] text-primary leading-none">
-                  {getAverage("ron91") ? `₱${getAverage("ron91")}` : "—"}
-                </span>
-              </div>
-              <div>
-                <span class="font-label-sm text-[10px] text-text-muted uppercase tracking-[2px]">AVG. UNLEADED</span>
+            <div class="border border-hairline p-md bg-surface-card flex flex-col justify-center min-h-[110px]">
+              <div class="flex items-center justify-between">
+                <div class="flex flex-col gap-xs">
+                  <span class="font-data-lg text-[32px] md:text-[40px] text-primary leading-none">
+                    {getAverage("ron91") ? `₱${getAverage("ron91")}` : "—"}
+                  </span>
+                  <span class="font-label-sm text-[10px] text-text-muted uppercase tracking-[2px]">AVG. UNLEADED</span>
+                </div>
+                {getChangeDetails("ron91") && (
+                  <div class="flex flex-col items-center gap-unit">
+                    <span
+                      classList={{
+                        "font-label-sm text-[11px] inline-flex items-center justify-center gap-xs px-xs py-[2px] rounded-none border": true,
+                        "text-ice-blue border-ice-blue/20 bg-ice-blue/5": getChangeDetails("ron91")!.isDecrease,
+                        "text-red-400 border-red-400/20 bg-red-400/5": getChangeDetails("ron91")!.isIncrease,
+                        "text-text-muted border-hairline bg-surface": !getChangeDetails("ron91")!.isIncrease && !getChangeDetails("ron91")!.isDecrease,
+                      }}
+                    >
+                      <span class="material-symbols-outlined text-[14px]">
+                        {getChangeDetails("ron91")!.isIncrease ? "trending_up" : getChangeDetails("ron91")!.isDecrease ? "trending_down" : "remove"}
+                      </span>
+                      {getChangeDetails("ron91")!.pct}%
+                    </span>
+                    <span class="font-label-sm text-[9px] text-text-muted opacity-60 uppercase tracking-[1px] text-center">
+                      VS {comparePeriod() === "weekly" ? "LAST WEEK" : "LAST MONTH"}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* RON 95 Card */}
-            <div class="border border-hairline p-md bg-surface-card flex flex-col justify-between min-h-[110px]">
-              <div class="flex items-baseline">
-                <span class="font-data-lg text-[36px] md:text-[48px] text-primary leading-none">
-                  {getAverage("ron95") ? `₱${getAverage("ron95")}` : "—"}
-                </span>
-              </div>
-              <div>
-                <span class="font-label-sm text-[10px] text-text-muted uppercase tracking-[2px]">AVG. PREMIUM</span>
+            <div class="border border-hairline p-md bg-surface-card flex flex-col justify-center min-h-[110px]">
+              <div class="flex items-center justify-between">
+                <div class="flex flex-col gap-xs">
+                  <span class="font-data-lg text-[32px] md:text-[40px] text-primary leading-none">
+                    {getAverage("ron95") ? `₱${getAverage("ron95")}` : "—"}
+                  </span>
+                  <span class="font-label-sm text-[10px] text-text-muted uppercase tracking-[2px]">AVG. PREMIUM</span>
+                </div>
+                {getChangeDetails("ron95") && (
+                  <div class="flex flex-col items-center gap-unit">
+                    <span
+                      classList={{
+                        "font-label-sm text-[11px] inline-flex items-center justify-center gap-xs px-xs py-[2px] rounded-none border": true,
+                        "text-ice-blue border-ice-blue/20 bg-ice-blue/5": getChangeDetails("ron95")!.isDecrease,
+                        "text-red-400 border-red-400/20 bg-red-400/5": getChangeDetails("ron95")!.isIncrease,
+                        "text-text-muted border-hairline bg-surface": !getChangeDetails("ron95")!.isIncrease && !getChangeDetails("ron95")!.isDecrease,
+                      }}
+                    >
+                      <span class="material-symbols-outlined text-[14px]">
+                        {getChangeDetails("ron95")!.isIncrease ? "trending_up" : getChangeDetails("ron95")!.isDecrease ? "trending_down" : "remove"}
+                      </span>
+                      {getChangeDetails("ron95")!.pct}%
+                    </span>
+                    <span class="font-label-sm text-[9px] text-text-muted opacity-60 uppercase tracking-[1px] text-center">
+                      VS {comparePeriod() === "weekly" ? "LAST WEEK" : "LAST MONTH"}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -235,9 +352,13 @@ const Stations: Component = () => {
                 <div class="py-md group hover:bg-surface-soft transition-colors">
                   <div class="flex flex-col md:flex-row md:items-center justify-between gap-md">
                     <div class="min-w-0 md:flex-1 md:basis-0">
-                      <h2 class="font-headline-md text-headline-lg md:text-headline-xl text-primary uppercase tracking-[2px] leading-tight truncate">
-                        {s.name}
-                      </h2>
+                      <div class="marquee-container">
+                        <div class="marquee-scroller">
+                          <h2 class="marquee-text font-headline-md text-headline-lg md:text-headline-xl text-primary uppercase tracking-[2px] leading-tight">
+                            {s.name}
+                          </h2>
+                        </div>
+                      </div>
                       <span class="font-label-sm text-[10px] text-text-muted opacity-40 uppercase">
                         {new Date(s.savedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                       </span>
