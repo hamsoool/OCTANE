@@ -351,11 +351,17 @@ const Landing: Component = () => {
   return (
     <div class="bg-black text-on-surface">
       {/* Landing Top Nav */}
-      <header classList={{
-        "fixed top-0 left-0 w-full z-50 flex justify-between items-center px-container-margin h-xl transition-all duration-300": true,
-        "bg-black/80 backdrop-blur-sm border-b border-hairline": scrollY() > 0,
-        "bg-transparent border-b border-transparent": scrollY() === 0,
-      }}>
+      <header 
+        classList={{
+          "fixed top-0 left-0 w-full z-50 flex justify-between items-center px-container-margin transition-all duration-300": true,
+          "bg-black/80 backdrop-blur-sm border-b border-hairline": scrollY() > 0,
+          "bg-transparent border-b border-transparent": scrollY() === 0,
+        }}
+        style={{
+          height: "calc(64px + env(safe-area-inset-top, 0px))",
+          "padding-top": "env(safe-area-inset-top, 0px)",
+        }}
+      >
         <div class="flex items-center gap-xs">
           <span class="font-label-md text-label-md uppercase text-primary select-none tracking-[1px]">
             LIVE VIEW
@@ -450,7 +456,7 @@ const Landing: Component = () => {
           </div>
 
           {/* RIGHT — map card: fills the right half on desktop with top inset for nav */}
-          <div class="w-full h-[400px] md:w-[58%] md:h-screen md:flex-none md:flex md:items-center md:justify-start md:pr-container-margin reveal">
+          <div class="w-full h-[80vh] px-container-margin md:px-0 md:w-[58%] md:h-screen md:flex-none md:flex md:items-center md:justify-start md:pr-container-margin reveal">
             <div class="w-full h-full md:h-[calc(100vh-140px)] bg-black border border-hairline flex flex-col">
               {/* Telemetry header */}
               <div class="flex-none px-md py-xs border-b border-hairline flex justify-between items-center bg-surface-soft select-none">

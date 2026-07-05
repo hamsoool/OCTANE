@@ -61,7 +61,12 @@ const AppLayout: Component<AppLayoutProps> = (props) => {
         isAuthenticated() ? (
           <>
             <TopNav />
-            <main class="pb-xl md:pb-0">
+            <main 
+              class="md:pb-0"
+              style={{
+                "padding-bottom": "calc(64px + env(safe-area-inset-bottom, 0px))",
+              }}
+            >
               <Suspense fallback={<div class="flex items-center justify-center h-64"><div class="font-label-md text-label-sm text-text-muted uppercase tracking-[2.5px]">Loading...</div></div>}>
                 {props.children}
               </Suspense>

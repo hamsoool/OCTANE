@@ -52,9 +52,13 @@ const TopNav: Component = () => {
   return (
     <header
       classList={{
-        "fixed top-0 left-0 w-full z-50 flex justify-end md:justify-center items-center px-container-margin h-xl transition-all duration-300": true,
+        "fixed top-0 left-0 w-full z-50 flex justify-end md:justify-center items-center px-container-margin transition-all duration-300": true,
         "bg-surface border-b border-hairline": scrolled(),
         "bg-transparent border-b border-transparent": !scrolled(),
+      }}
+      style={{
+        height: "calc(64px + env(safe-area-inset-top, 0px))",
+        "padding-top": "env(safe-area-inset-top, 0px)",
       }}
     >
       <nav class="hidden md:flex gap-lg h-full items-center">

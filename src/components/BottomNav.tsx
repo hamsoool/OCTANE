@@ -19,7 +19,13 @@ const BottomNav: Component = () => {
   const items = isAdmin ? adminItems : regularItems;
 
   return (
-    <nav class="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-xl bg-surface px-4 border-t border-hairline">
+    <nav 
+      class="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center bg-surface px-4 border-t border-hairline"
+      style={{
+        height: "calc(64px + env(safe-area-inset-bottom, 0px))",
+        "padding-bottom": "env(safe-area-inset-bottom, 0px)",
+      }}
+    >
       {items.map((item) => (
         <A
           href={item.href}
