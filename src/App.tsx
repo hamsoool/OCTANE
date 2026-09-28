@@ -3,6 +3,7 @@ import { Router, Route } from "@solidjs/router";
 import AppLayout from "./components/AppLayout";
 import Landing from "./pages/Landing";
 import AuthPage from "./pages/AuthPage";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 import Dashboard from "./pages/Dashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import Stations from "./pages/Stations";
@@ -16,6 +17,7 @@ const App: Component = () => {
       <Router>
         <Route path="/" component={Landing} />
         <Route path="/auth" component={AuthPage} />
+        <Route path="/privacy" component={PrivacyPolicy} />
         <Route path="/dashboard" component={AppLayout}>
           <Route path="/" component={Dashboard} />
         </Route>

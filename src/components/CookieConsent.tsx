@@ -187,8 +187,15 @@ const CookieConsent: Component = () => {
               </button>
             </div>
 
-            {showPrefs() && (
-              <div class="mt-md pt-md border-t border-[#262626] space-y-sm">
+            <div
+              class="grid transition-all duration-300 ease-out"
+              style={{
+                "grid-template-rows": showPrefs() ? "1fr" : "0fr",
+                opacity: showPrefs() ? "1" : "0",
+              }}
+            >
+              <div class="overflow-hidden">
+                <div class="mt-md pt-md border-t border-[#262626] space-y-sm">
                 <p class="font-label-sm text-text-muted text-xs uppercase tracking-[1.5px] mb-sm">
                   Manage Cookie Preferences
                 </p>
@@ -228,8 +235,9 @@ const CookieConsent: Component = () => {
                 >
                   Save Preferences
                 </button>
+                </div>
               </div>
-            )}
+            </div>
           </div>
         </div>
       )}

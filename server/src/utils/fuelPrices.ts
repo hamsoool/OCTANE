@@ -1,4 +1,4 @@
-import { getRedis } from "./redis.js";
+import { getRedis, reportRedisError } from "./redis.js";
 
 export interface FuelGradePrices {
   ron91?: string;
@@ -174,7 +174,7 @@ export async function getFuelPrices(): Promise<EnrichedPrices> {
         return prices;
       }
     } catch (err) {
-      console.error("[fuelPrices] Redis cache read error:", err);
+      reportRedisError("fuel price cache read", err);
     }
   }
 
@@ -360,7 +360,7 @@ export async function getFuelPrices(): Promise<EnrichedPrices> {
       
       if (redis) {
         redis.setex(REDIS_FUEL_KEY, REDIS_FUEL_TTL_SEC, JSON.stringify(result))
-          .catch((err: any) => console.error("[fuelPrices] Redis cache write error:", err));
+          .catch((err: any) => reportRedisError("fuel price cache write", err));
       }
       return result;
     }

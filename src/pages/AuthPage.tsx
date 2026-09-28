@@ -494,7 +494,13 @@ const AuthPage: Component = () => {
                   Cancel
                 </button>
                 <div class="flex justify-center gap-md mt-sm">
-                  <span class="font-label-sm text-label-sm text-text-muted uppercase tracking-[1px] opacity-60">Privacy Policy</span>
+                  <button
+                    type="button"
+                    onClick={() => navigate("/privacy")}
+                    class="font-label-sm text-label-sm text-text-muted uppercase tracking-[1px] opacity-60 hover:opacity-100 hover:text-primary transition-all"
+                  >
+                    Privacy Policy
+                  </button>
                   <span class="text-hairline">|</span>
                   <span class="font-label-sm text-label-sm text-text-muted uppercase tracking-[1px] opacity-60">Terms & Conditions</span>
                 </div>

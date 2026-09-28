@@ -1,6 +1,7 @@
 import { createSignal, onMount, type Component, onCleanup, For, createEffect } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { checkSession, getRole, isAuthenticated, apiGet } from "../api";
+import { requestCookieConsent } from "../components/CookieConsent";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { MAP_THEMES, applyThemeStyle } from "../constants/mapThemes";
@@ -166,6 +167,38 @@ const Landing: Component = () => {
   const [map, setMap] = createSignal<maplibregl.Map | null>(null);
   const [loading, setLoading] = createSignal(true);
   const [syncTime, setSyncTime] = createSignal("");
+  const [stations, setStations] = createSignal<Station[]>([]);
+
+  // Live price ticker: grade averages across the stations currently on the map.
+  // Only real fuel data counts — seeded estimate prices (~₱2) fall outside the
+  // sanity range, and live elements hide entirely until live data arrives.
+  const gradeAverages = () => {
+    const list = stations();
+    const avg = (pick: (f?: FuelData) => string | undefined): number | null => {
+      const vals = list
+        .map((s) => parseFloat(pick(s.fuelData) ?? ""))
+        .filter((v) => !isNaN(v) && v >= 30 && v <= 150);
+      if (vals.length === 0) return null;
+      return vals.reduce((a, b) => a + b, 0) / vals.length;
+    };
+    return {
+      count: list.length,
+      diesel: avg((f) => f?.diesel),
+      ron91: avg((f) => f?.ron91),
+      ron95: avg((f) => f?.ron95),
+    };
+  };
+  const tickerItems = () => {
+    const g = gradeAverages();
+    if (g.count === 0) return [];
+    const items: Array<{ label: string; value: string }> = [
+      { label: "STATIONS LIVE", value: String(g.count) },
+    ];
+    if (g.diesel) items.push({ label: "DIESEL AVG", value: `₱${g.diesel.toFixed(2)}` });
+    if (g.ron91) items.push({ label: "UNLEADED AVG", value: `₱${g.ron91.toFixed(2)}` });
+    if (g.ron95) items.push({ label: "PREMIUM AVG", value: `₱${g.ron95.toFixed(2)}` });
+    return items;
+  };
 
   const updateSyncTime = () => {
     const now = new Date();
@@ -183,8 +216,15 @@ const Landing: Component = () => {
     }
 
     const handleScroll = () => {
-      setScrollY(window.scrollY);
-      updateOffset();
+      // One update per animation frame: without this, a fast flick delivers
+      // scroll positions faster than frames can paint and the wordmark jumps.
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        setScrollY(window.scrollY);
+        updateOffset();
+        ticking = false;
+      });
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
@@ -216,6 +256,7 @@ const Landing: Component = () => {
     updateSyncTime();
     let mapInstance: maplibregl.Map | null = null;
     let markers: maplibregl.Marker[] = [];
+    let ticking = false;
 
     const initMap = () => {
       if (!mapContainer) return;
@@ -243,6 +284,7 @@ const Landing: Component = () => {
           console.log("[OCTANE] Landing stations fetch:", res);
           if (res.success && res.data && mapInstance) {
             console.log(`[OCTANE] Adding ${res.data.length} markers`);
+            setStations(res.data);
             res.data.forEach((station) => {
               const el = document.createElement("div");
               el.id = `landing-marker-${station.id}`;
@@ -388,6 +430,10 @@ const Landing: Component = () => {
           "text-transform": "uppercase",
           "white-space": "nowrap",
           "will-change": "transform, font-size",
+          // Short easing so the glide survives coarse scroll delivery
+          // (touch momentum, background tab): JS retargets every frame,
+          // CSS bridges any gap between updates.
+          transition: "transform 0.18s ease-out, font-size 0.18s ease-out, letter-spacing 0.18s ease-out",
           left: "0px",
           top: "0px",
           "font-size": `${48 - octProgress() * 28}px`,
@@ -409,7 +455,7 @@ const Landing: Component = () => {
       </div>
 
       {/* Hero */}
-      <section class="relative w-full">
+      <section id="live-map" class="relative w-full">
         {/* Parallax background — covers full hero height */}
         <div class="absolute inset-0 z-0 overflow-hidden" style={{ "min-height": "100vh" }}>
           <div
@@ -464,7 +510,7 @@ const Landing: Component = () => {
                   <span class="w-1.5 h-1.5 bg-ice-blue rounded-full animate-pulse" />
                   <span class="font-label-sm text-[10px] text-primary uppercase tracking-[2px]">MAP_WIDGET: PUBLIC_FEED</span>
                 </div>
-                <span class="font-label-sm text-[9px] text-text-muted uppercase tracking-[1px]">{syncTime() || "LIVE_TELEMETRY"}</span>
+                <span class="font-label-sm text-[9px] text-text-muted uppercase tracking-[1px]">{syncTime() || "LIVE_TELEMETRY"}{stations().length > 0 ? ` · ${stations().length} STATIONS` : ""}</span>
               </div>
 
               {/* Map — fills all remaining height in the card */}
@@ -500,75 +546,73 @@ const Landing: Component = () => {
         </div>
       </section>
 
-      {/* Regional Intelligence */}
-      <section id="regional-intelligence" class="bg-black py-section-gap px-container-margin overflow-hidden">
-        <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-lg items-center">
-          <div class="reveal">
-            <span class="font-label-sm text-label-sm text-text-muted uppercase mb-xs block">01 / CAPABILITY</span>
-            <h2 class="font-headline-lg text-headline-lg text-primary uppercase mb-md">
-              REGIONAL<br />INTELLIGENCE
-            </h2>
-            <p class="font-body-md text-body-md text-text-body mb-lg">
-              Our global proprietary sensor network provides millisecond-latency price adjustments across 45,000 nodes,
-              ensuring your telemetry remains surgically precise.
-            </p>
-            <div class="grid grid-cols-2 gap-md border-t border-hairline pt-md">
-              <AnimatedCounter value={45.8} suffix="k" label="ACTIVE NODES" />
-              <AnimatedCounter value={0.002} suffix="s" label="DATA LATENCY" />
-            </div>
-          </div>
-          <div class="relative h-[400px] md:h-[500px] bg-surface-soft border border-hairline p-md reveal">
-            <div class="w-full h-full grayscale opacity-80">
-              <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <div class="w-full h-px bg-hairline absolute top-1/4"></div>
-                <div class="w-full h-px bg-hairline absolute top-1/2"></div>
-                <div class="w-full h-px bg-hairline absolute top-3/4"></div>
-                <div class="h-full w-px bg-hairline absolute left-1/4"></div>
-                <div class="h-full w-px bg-hairline absolute left-1/2"></div>
-                <div class="h-full w-px bg-hairline absolute left-3/4"></div>
+      {/* Live price ticker — real averages from the stations on the map above.
+          Hidden until station data arrives. */}
+      {tickerItems().length > 0 && (
+        <div class="bg-black border-y border-hairline overflow-hidden select-none" aria-hidden="true">
+          <div class="ticker-track flex w-max">
+            {[0, 1].map(() => (
+              <div class="flex items-center gap-xl px-md py-xs">
+                {tickerItems().map((t) => (
+                  <span class="flex items-center gap-xs font-label-sm text-[10px] uppercase tracking-[2px] whitespace-nowrap">
+                    <span class="w-1.5 h-1.5 bg-ice-blue rounded-full animate-pulse" />
+                    <span class="text-text-muted">{t.label}</span>
+                    <span class="text-primary">{t.value}</span>
+                  </span>
+                ))}
               </div>
-              <div class="relative z-10 flex flex-col gap-sm p-md">
-                <div class="p-xs bg-black border border-hairline w-fit">
-                  <span class="font-label-sm text-[8px] text-white">LAT: 52.5200° N</span>
-                </div>
-                <div class="p-xs bg-black border border-hairline w-fit">
-                  <span class="font-label-sm text-[8px] text-white">LNG: 13.4050° E</span>
-                </div>
-              </div>
-              <div class="absolute bottom-md right-md flex items-end gap-xs">
-                <span class="font-label-sm text-label-sm text-text-muted">SYSTEM ONLINE</span>
-                <div class="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
-      </section>
+      )}
 
-      {/* Station Fidelity */}
-      <section class="bg-black pb-section-gap px-container-margin">
-        <div class="max-w-7xl mx-auto">
-          <div class="flex flex-col md:flex-row justify-between items-end mb-xl reveal">
-            <div class="flex-1">
-              <span class="font-label-sm text-label-sm text-text-muted uppercase mb-xs block">02 / INTERFACE</span>
-              <h2 class="font-headline-lg text-headline-lg text-primary uppercase mb-md">
-                STATION FIDELITY
-              </h2>
-              <p class="font-body-md text-body-md text-text-body">
-                High-contrast data cards optimized for rapid visual acquisition while in motion. Every value is validated
-                via triple-node consensus.
-              </p>
-            </div>
-            <button class="hidden md:block font-label-md text-label-md uppercase underline underline-offset-8 decoration-hairline hover:decoration-white transition-all">
-              VIEW LIVE FEED
-            </button>
+      {/* What you can do here — one strip, three things */}
+      <section id="regional-intelligence" class="relative bg-black py-section-gap px-container-margin overflow-hidden">
+        <div
+          class="pointer-events-none absolute inset-0"
+          style={{ background: "radial-gradient(600px 300px at 80% 0%, rgba(195,217,243,0.07), transparent)" }}
+          aria-hidden="true"
+        />
+        <div class="relative max-w-7xl mx-auto">
+          <div class="mb-xl reveal">
+            <span class="font-label-sm text-label-sm text-text-muted uppercase mb-xs block">WHAT YOU CAN DO HERE</span>
+            <h2 class="font-headline-lg text-headline-lg text-primary uppercase mb-md">
+              MADE FOR DRIVERS<br />IN ZAMBALES
+            </h2>
+            <p class="font-body-md text-body-md text-text-body">
+              Check fuel prices before you leave the house, keep your regular
+              stations in one list, and see how prices moved since last week.
+              That's the whole app.
+            </p>
           </div>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-sm reveal">
             {[
-              { name: "SHELL V-POWER", grade: "OCTANE 98", price: "1.942", delta: -0.004, down: true },
-              { name: "ARAL ULTIMATE", grade: "OCTANE 102", price: "2.018", delta: 0, down: false },
-              { name: "TOTAL EXCELLIUM", grade: "DIESEL PREM", price: "1.829", delta: -0.012, down: true },
+              {
+                name: "CHECK BEFORE YOU GO",
+                grade: "LIVE MAP · OLONGAPO + SUBIC",
+                body: "Every station on the map shows an approximated price per grade, refreshed weekly. Tap any marker for the full breakdown.",
+                action: "OPEN THE MAP",
+                onAction: () => scrollTo("live-map"),
+                liveBars: true,
+              },
+              {
+                name: "SAVE YOUR REGULARS",
+                grade: "WATCHLIST · FREE ACCOUNT",
+                body: "Sign in and keep your usual stations in one list, instead of checking them one by one every time you drive out.",
+                action: "CREATE WATCHLIST",
+                onAction: () => navigate("/auth"),
+                liveBars: false,
+              },
+              {
+                name: "SEE THE MOVEMENT",
+                grade: "THIS WEEK VS LAST",
+                body: "Each saved station shows how its price moved since last week and last month — so you know whether to fill up now or wait.",
+                action: "SIGN IN TO TRACK",
+                onAction: () => navigate("/auth"),
+                liveBars: false,
+              },
             ].map((s) => (
-              <div class="bg-surface-card p-md border-t border-hairline group hover:bg-surface-container transition-colors">
+              <div class="bg-surface-card p-md border-t border-hairline group hover:bg-surface-container transition-colors flex flex-col">
                 <div class="flex justify-between items-start mb-lg">
                   <h3 class="font-headline-md text-headline-md text-primary uppercase">{s.name}</h3>
                   <span class="material-symbols-outlined text-text-muted group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform">
@@ -577,27 +621,38 @@ const Landing: Component = () => {
                 </div>
                 <div class="mb-sm">
                   <span class="font-label-sm text-label-sm text-text-muted block">{s.grade}</span>
-                  <div class="font-data-lg text-[48px] text-primary">{s.price}</div>
                 </div>
-                <div
-                  classList={{
-                    "flex justify-between items-center": true,
-                    "text-ice-blue": s.down,
-                    "text-text-muted": !s.down,
-                  }}
+                <p class="font-body-md text-body-md text-text-body mb-lg flex-1">
+                  {s.body}
+                </p>
+                {s.liveBars && (
+                  stations().length > 0 ? (
+                    <GradeBars
+                      grades={[
+                        { label: "DIESEL", value: gradeAverages().diesel },
+                        { label: "UNLEADED", value: gradeAverages().ron91 },
+                        { label: "PREMIUM", value: gradeAverages().ron95 },
+                      ]}
+                    />
+                  ) : (
+                    <span class="font-label-sm text-[10px] text-text-muted uppercase tracking-[2px] mt-md animate-pulse">
+                      LOADING LIVE DATA…
+                    </span>
+                  )
+                )}
+                <button
+                  onClick={s.onAction}
+                  class={`self-start font-label-md text-label-md uppercase underline underline-offset-8 decoration-hairline hover:decoration-white transition-all cursor-pointer ${s.liveBars ? "mt-lg" : ""}`}
                 >
-                  <span class="font-label-sm text-label-sm">
-                    {s.down ? `PRICE DELTA ${s.delta}` : "STABLE POSITION"}
-                  </span>
-                  <span class="material-symbols-outlined text-sm">
-                    {s.down ? "trending_down" : "remove"}
-                  </span>
-                </div>
+                  {s.action}
+                </button>
               </div>
             ))}
           </div>
         </div>
       </section>
+
+      <FaqSection />
 
       {/* Pre-footer Photo Band */}
       <section class="relative py-section-gap w-full flex items-center justify-center overflow-hidden">
@@ -612,7 +667,7 @@ const Landing: Component = () => {
         </div>
         <div class="relative z-10 text-center px-container-margin py-xl max-w-3xl">
           <h2 class="font-headline-lg text-headline-lg text-primary uppercase mb-md reveal">
-            ENGINEERED FOR THE DISCERNING MOTORIST
+            ESTIMATES FROM WEEKLY DATA — NOT PUMP READINGS
           </h2>
           <div class="reveal">
             <button
@@ -626,39 +681,73 @@ const Landing: Component = () => {
       </section>
 
       {/* Footer */}
-      <footer class="bg-black py-xl px-container-margin border-t border-hairline">
-        <div class="max-w-7xl mx-auto flex flex-col gap-xl">
-          <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-md">
+      <footer class="bg-black pt-xl pb-md px-container-margin border-t border-hairline">
+        <div class="max-w-7xl mx-auto flex flex-col gap-lg">
+          <div class="flex justify-center overflow-hidden">
+            <h2 class="font-headline-xl text-[120px] md:text-[200px] leading-none text-surface-container font-extrabold uppercase select-none pointer-events-none tracking-[-0.05em] opacity-30">
+              OCTANE
+            </h2>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-lg">
+            <div class="col-span-2 md:col-span-1 flex flex-col gap-xs">
+              <span class="font-headline-md text-headline-md text-primary uppercase tracking-[2px]">OCTANE</span>
+              <span class="font-label-sm text-[10px] text-text-muted uppercase tracking-[1px] leading-relaxed">
+                Zambales fuel price watchlist.<br />Estimates from weekly data.
+              </span>
+            </div>
             <div class="flex flex-col gap-xs">
+              <span class="font-label-sm text-[10px] text-text-muted uppercase tracking-[2px] mb-xs opacity-60">EXPLORE</span>
+              <button
+                onClick={() => scrollTo("live-map")}
+                class="font-label-md text-label-md text-text-muted hover:text-white transition-colors text-left cursor-pointer"
+              >
+                LIVE MAP
+              </button>
               <button
                 onClick={() => navigate("/auth")}
-                class="font-label-md text-label-md text-text-muted hover:text-white transition-colors text-left"
+                class="font-label-md text-label-md text-text-muted hover:text-white transition-colors text-left cursor-pointer"
               >
                 WATCHLIST
               </button>
               <button
                 onClick={() => navigate("/auth")}
-                class="font-label-md text-label-md text-text-muted hover:text-white transition-colors text-left"
+                class="font-label-md text-label-md text-text-muted hover:text-white transition-colors text-left cursor-pointer"
               >
                 STATIONS
               </button>
+            </div>
+            <div class="flex flex-col gap-xs">
+              <span class="font-label-sm text-[10px] text-text-muted uppercase tracking-[2px] mb-xs opacity-60">LEGAL</span>
               <button
-                onClick={() => navigate("/auth")}
-                class="font-label-md text-label-md text-text-muted hover:text-white transition-colors text-left"
+                onClick={() => navigate("/privacy")}
+                class="font-label-md text-label-md text-text-muted hover:text-white transition-colors text-left cursor-pointer"
               >
-                INTELLIGENCE
+                PRIVACY POLICY
+              </button>
+              <button
+                onClick={() => requestCookieConsent()}
+                class="font-label-md text-label-md text-text-muted hover:text-white transition-colors text-left cursor-pointer"
+              >
+                COOKIE SETTINGS
               </button>
             </div>
-            <div class="flex flex-col gap-xs md:text-right">
-              <span class="font-label-md text-label-md text-text-muted">LEGAL/TERMS</span>
-              <span class="font-label-md text-label-md text-text-muted">PRIVACY POLICY</span>
-              <span class="font-label-md text-label-md text-text-muted">© {new Date().getFullYear()} OCTANE GLOBAL</span>
+            <div class="flex flex-col gap-xs">
+              <span class="font-label-sm text-[10px] text-text-muted uppercase tracking-[2px] mb-xs opacity-60">CONTACT</span>
+              <a
+                href="mailto:soul.jsx@gmail.com"
+                class="font-label-md text-label-md text-text-muted hover:text-white transition-colors w-fit"
+              >
+                soul.jsx@gmail.com
+              </a>
+              <span class="font-label-sm text-[10px] text-text-muted uppercase tracking-[1px]">
+                DATA REFRESHED WEEKLY
+              </span>
             </div>
           </div>
-          <div class="pt-xl flex justify-center border-t border-hairline overflow-hidden">
-            <h2 class="font-headline-xl text-[120px] md:text-[200px] leading-none text-surface-container font-extrabold uppercase select-none pointer-events-none tracking-[-0.05em] opacity-30">
-              OCTANE
-            </h2>
+          <div class="pt-md flex flex-col md:flex-row justify-between items-center gap-xs border-t border-hairline font-label-sm text-[10px] text-text-muted uppercase tracking-[1px]">
+            <span>© {new Date().getFullYear()} OCTANE</span>
+            <span class="opacity-60">ALL PRICES APPROX · NOT PUMP READINGS</span>
+            <span class="opacity-60">MADE BY SOUL.jsx</span>
           </div>
         </div>
       </footer>
@@ -673,46 +762,113 @@ const Landing: Component = () => {
           opacity: 1;
           transform: translateY(0);
         }
+        .ticker-track {
+          animation: ticker-scroll 28s linear infinite;
+        }
+        @keyframes ticker-scroll {
+          from { transform: translateX(0); }
+          to { transform: translateX(-50%); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .ticker-track { animation: none; }
+        }
       `}</style>
     </div>
   );
 };
 
-const AnimatedCounter: Component<{ value: number; suffix: string; label: string }> = (props) => {
-  const [display, setDisplay] = createSignal("");
-  let ref: HTMLDivElement | undefined;
-
-  onMount(() => {
-    if (!ref) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          let current = 0;
-          const end = props.value;
-          const duration = 1200;
-          const step = Math.max(end / 60, 0.001);
-          const timer = setInterval(() => {
-            current += step;
-            if (current >= end) {
-              setDisplay(end + props.suffix);
-              clearInterval(timer);
-            } else {
-              setDisplay(current.toFixed(props.value < 1 ? 3 : 1) + props.suffix);
-            }
-          }, duration / 60);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.5 }
-    );
-    observer.observe(ref);
-  });
-
+// Live average-price bars. Widths are normalized to a fixed ₱60–₱110 domain
+// so they stay comparable week to week; they animate in when data arrives.
+const GradeBars: Component<{ grades: Array<{ label: string; value: number | null }> }> = (props) => {
   return (
-    <div ref={ref}>
-      <div class="font-data-lg text-data-lg text-primary mb-xs">{display() || "—"}</div>
-      <div class="font-label-sm text-label-sm text-text-muted uppercase">{props.label}</div>
+    <div class="flex flex-col gap-sm mt-md">
+      {props.grades.map((g) => (
+        <div>
+          <div class="flex justify-between items-baseline mb-xs">
+            <span class="font-label-sm text-[10px] text-text-muted uppercase tracking-[2px]">{g.label}</span>
+            <span class="font-data-lg text-[15px] text-primary">{g.value !== null ? `₱${g.value.toFixed(2)}` : "—"}</span>
+          </div>
+          <div class="h-[3px] bg-white/10 w-full">
+            <div
+              class="h-full bg-ice-blue transition-all duration-1000 ease-out"
+              style={{ width: g.value !== null ? `${Math.min(100, Math.max(6, ((g.value - 60) / 50) * 100))}%` : "0%" }}
+            />
+          </div>
+        </div>
+      ))}
     </div>
+  );
+};
+
+const FAQ_ITEMS: Array<{ q: string; a: string }> = [
+  {
+    q: "Are these the actual pump prices?",
+    a: "No. They're weekly estimates built from aggregated regional data — close enough to plan around, but always check the signboard before you fill up.",
+  },
+  {
+    q: "Do I need an account?",
+    a: "Not for the map — it's open to everyone. You only need one if you want to save stations to a watchlist.",
+  },
+  {
+    q: "Which areas are covered?",
+    a: "Olongapo City and Subic, Zambales. That's it for now — it's a local project.",
+  },
+  {
+    q: "How often do prices update?",
+    a: "The data refreshes weekly, and the app caches it for a day so pages stay fast.",
+  },
+  {
+    q: "Who's behind this?",
+    a: "SOUL.jsx — a local passion project. Questions or corrections: soul.jsx@gmail.com.",
+  },
+];
+
+const FaqSection: Component = () => {
+  const [open, setOpen] = createSignal<number | null>(0);
+  return (
+    <section class="bg-black py-section-gap px-container-margin">
+      <div class="max-w-4xl mx-auto">
+        <div class="mb-lg reveal">
+          <span class="font-label-sm text-label-sm text-text-muted uppercase mb-xs block">STRAIGHT ANSWERS</span>
+          <h2 class="font-headline-lg text-headline-lg text-primary uppercase">
+            ASKED A LOT
+          </h2>
+        </div>
+        <div class="reveal border-t border-hairline">
+          {FAQ_ITEMS.map((item, i) => (
+            <div class="border-b border-hairline">
+              <button
+                onClick={() => setOpen(open() === i ? null : i)}
+                class="w-full flex justify-between items-center gap-md py-md text-left cursor-pointer group"
+              >
+                <span class="font-headline-md text-headline-md text-primary uppercase group-hover:opacity-70 transition-opacity">
+                  {item.q}
+                </span>
+                <span
+                  class="material-symbols-outlined text-text-muted shrink-0 transition-transform duration-300"
+                  style={{ transform: open() === i ? "rotate(180deg)" : "rotate(0deg)" }}
+                >
+                  expand_more
+                </span>
+              </button>
+              <div
+                class="grid transition-all duration-300 ease-out"
+                style={{
+                  "grid-template-rows": open() === i ? "1fr" : "0fr",
+                  opacity: open() === i ? "1" : "0",
+                }}
+              >
+                <div class="overflow-hidden">
+                  <p class="font-body-md text-body-md text-text-body pb-md pr-xl leading-relaxed">
+                    {item.a}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 };
 

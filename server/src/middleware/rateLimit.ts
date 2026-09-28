@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { getRedis } from "../utils/redis.js";
+import { getRedis, reportRedisError } from "../utils/redis.js";
 
 const IP_WINDOW_SEC = 300;
 const IP_MAX_REQUESTS = 10;
@@ -31,7 +31,7 @@ export async function ipRateLimit(req: Request, res: Response, next: NextFunctio
 
     next();
   } catch (err) {
-    console.error("Rate limit error:", err);
+    reportRedisError("rate limiter", err);
     next();
   }
 }

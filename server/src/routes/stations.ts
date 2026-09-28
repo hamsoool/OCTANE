@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { getFuelPrices, calculateStationPrices } from "../utils/fuelPrices.js";
-import { getRedis } from "../utils/redis.js";
+import { getRedis, reportRedisError } from "../utils/redis.js";
 import CachedStation from "../models/CachedStation.js";
 
 const router = Router();
@@ -110,7 +110,7 @@ async function persistStations(stations: any[]): Promise<void> {
   inMemoryCache = { stations, fetchedAt: Date.now() };
   const redis = getRedis();
   if (redis) {
-    await redis.setex(REDIS_STATIONS_KEY, REDIS_CACHE_TTL_SEC, JSON.stringify(stations)).catch((err: any) => console.error("Redis cache write error:", err));
+    await redis.setex(REDIS_STATIONS_KEY, REDIS_CACHE_TTL_SEC, JSON.stringify(stations)).catch((err: any) => reportRedisError("station cache write", err));
   }
 }
 
@@ -153,7 +153,7 @@ async function getStations(): Promise<any[] | null> {
         return stations;
       }
     } catch (err) {
-      console.error("Redis cache read error:", err);
+      reportRedisError("station cache read", err);
     }
   }
 
