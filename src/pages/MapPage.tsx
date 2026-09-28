@@ -21,6 +21,7 @@ interface Station {
   preferredGrade?: string;
   price: string;
   priceGrade?: string;
+  priceWeek?: string | null;
   fuelData?: FuelData;
   dist: string;
   coordinates: [number, number];
@@ -988,6 +989,9 @@ const MapPage: Component = () => {
             <div>
               <h2 class="font-headline-md text-headline-md uppercase tracking-wider mb-xs">NEARBY STATIONS</h2>
               <p class="font-label-sm text-label-sm text-text-muted">SCANNING RADIUS: 5.0KM</p>
+              {stations()[0]?.priceWeek && (
+                <p class="font-label-sm text-label-sm text-text-muted">DOE PRICES AS OF {new Date(`${stations()[0]!.priceWeek!}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }).toUpperCase()}</p>
+              )}
             </div>
           </div>
           {userLocation() && (

@@ -16,6 +16,7 @@ router.get("/", async (req: AuthRequest, res: Response) => {
     const {
       pumpPrices,
       adjustments,
+      priceWeek,
       priorPumpPricesWeek,
       priorAdjustmentsWeek,
       priorPumpPricesMonth,
@@ -55,6 +56,7 @@ router.get("/", async (req: AuthRequest, res: Response) => {
         name: s.name.replace(/_/g, " "),
         brand: s.brand?.replace(/_/g, " "),
         price: primaryPrice,
+        priceWeek: priceWeek ?? null,
         fuelData: {
           diesel: currentPrices.diesel || s.fuelData?.diesel,
           ron91: currentPrices.ron91 || s.fuelData?.ron91,

@@ -11,6 +11,7 @@ interface SavedStation {
   preferredGrade?: string;
   price: string;
   priceGrade?: string;
+  priceWeek?: string | null;
   fuelData?: {
     diesel?: string;
     ron91?: string;
@@ -199,7 +200,13 @@ const Stations: Component = () => {
         <div>
           <h1 class="font-headline-lg text-headline-lg text-primary uppercase mb-xs">SAVED STATIONS</h1>
           <p class="font-label-sm text-label-sm text-text-muted uppercase">
-            {loading() ? "LOADING..." : `${stations().length} STATION${stations().length !== 1 ? "S" : ""} SAVED`}
+            {loading()
+              ? "LOADING..."
+              : `${stations().length} STATION${stations().length !== 1 ? "S" : ""} SAVED${
+                  stations()[0]?.priceWeek
+                    ? ` · DOE PRICES AS OF ${new Date(`${stations()[0]!.priceWeek!}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }).toUpperCase()}`
+                    : ""
+                }`}
           </p>
         </div>
         {!loading() && stations().length > 0 && (

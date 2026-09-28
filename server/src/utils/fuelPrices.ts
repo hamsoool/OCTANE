@@ -10,6 +10,8 @@ export interface FuelGradePrices {
 export interface EnrichedPrices {
   pumpPrices: any;
   adjustments: any;
+  priceWeek?: string | null;
+  adjustmentWeek?: string | null;
   priorPumpPricesWeek?: any;
   priorAdjustmentsWeek?: any;
   priorPumpPricesMonth?: any;
@@ -22,7 +24,7 @@ interface CacheEntry {
 }
 
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours (in-memory fallback)
-const REDIS_FUEL_KEY = "fuel:prices:north-luzon:v3";
+const REDIS_FUEL_KEY = "fuel:prices:north-luzon:v4";
 const REDIS_FUEL_TTL_SEC = 86400; // 24 hours
 
 let cache: CacheEntry | null = null;
@@ -187,6 +189,9 @@ export async function getFuelPrices(): Promise<EnrichedPrices> {
   let priorPumpPricesMonth: any = null;
   let priorAdjustmentsMonth: any = null;
 
+  let priceWeek: string | null = null;
+  let adjustmentWeek: string | null = null;
+
   try {
     const apiKey = getApiKey();
     const apiUrl = getApiUrl();
@@ -295,10 +300,20 @@ export async function getFuelPrices(): Promise<EnrichedPrices> {
       }
     }
 
-    // Now populate current, weekly, and monthly trends
-    if (catalog.length > 0) {
-      pumpPrices = catalog[0].pumpPrices;
-      adjustments = catalog[0].adjustments;
+    // Now populate current, weekly, and monthly trends.
+    // The newest catalog entry may lack pump prices (DOE sometimes publishes a
+    // report-format PDF with no city breakdown) — fall back to the newest entry
+    // that has them so station prices never go blank. Weeks are tracked so the
+    // UI can label stale data honestly.
+    const currentEntry = catalog.find((e) => e.pumpPrices != null) ?? catalog[0] ?? null;
+    const currentAdjEntry = catalog.find((e) => e.adjustments != null) ?? catalog[0] ?? null;
+    if (currentEntry) {
+      pumpPrices = currentEntry.pumpPrices;
+      priceWeek = currentEntry.date;
+    }
+    if (currentAdjEntry) {
+      adjustments = currentAdjEntry.adjustments;
+      adjustmentWeek = currentAdjEntry.date;
     }
     
     if (catalog.length > 1) {
@@ -328,6 +343,8 @@ export async function getFuelPrices(): Promise<EnrichedPrices> {
       const result: EnrichedPrices = {
         pumpPrices,
         adjustments,
+        priceWeek,
+        adjustmentWeek,
         priorPumpPricesWeek,
         priorAdjustmentsWeek,
         priorPumpPricesMonth,

@@ -199,7 +199,7 @@ router.get("/", async (req, res) => {
   }
 
   // 6. Enrich with fuel prices
-  const { pumpPrices, adjustments } = await getFuelPrices();
+  const { pumpPrices, adjustments, priceWeek } = await getFuelPrices();
   const preferredGrade = (process.env.DOE_PREFERRED_GRADE ?? "ron91") as "ron91" | "ron95" | "ron97" | "diesel";
 
   // Normalize underscores to spaces in cached names
@@ -230,6 +230,7 @@ router.get("/", async (req, res) => {
       preferredGrade,
       price: primaryPrice,
       priceGrade: gradeLabel,
+      priceWeek: priceWeek ?? null,
       fuelData: {
         diesel: stationPrices.diesel,
         ron91: stationPrices.ron91,
