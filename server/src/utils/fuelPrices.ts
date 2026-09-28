@@ -203,18 +203,20 @@ export async function getFuelPrices(): Promise<EnrichedPrices> {
     const dateToPrices: Record<string, any> = {};
     const dateToAdjustments: Record<string, any> = {};
 
-    // 3a. Fetch Price Adjustments history (limit 12)
+    // 3a. Fetch Price Adjustments history (limit 12).
+    // Generous per-attempt timeout: the soul-scraper API is free-tier and
+    // often needs 30-45s to wake from sleep on the first call.
     try {
       const adjListRes = await fetchWithRetry(
         `${apiUrl}/documents?category=Price%20Adjustments&limit=12`,
-        { signal: AbortSignal.timeout(15000), headers: { "X-API-Key": apiKey } }
+        { signal: AbortSignal.timeout(45000), headers: { "X-API-Key": apiKey } }
       );
       if (adjListRes.ok) {
         const docs: Array<{ id: number; published_date?: string; title: string }> = await adjListRes.json();
         for (const doc of docs) {
           try {
             const detailRes = await fetchWithRetry(`${apiUrl}/documents/${doc.id}`, {
-              signal: AbortSignal.timeout(15000),
+              signal: AbortSignal.timeout(45000),
               headers: { "X-API-Key": apiKey }
             });
             if (!detailRes.ok) continue;
@@ -240,14 +242,14 @@ export async function getFuelPrices(): Promise<EnrichedPrices> {
     try {
       const nlListRes = await fetchWithRetry(
         `${apiUrl}/documents?category=North%20Luzon%20Pump%20Prices&limit=12`,
-        { signal: AbortSignal.timeout(15000), headers: { "X-API-Key": apiKey } }
+        { signal: AbortSignal.timeout(45000), headers: { "X-API-Key": apiKey } }
       );
       if (nlListRes.ok) {
         const docs: Array<{ id: number; published_date?: string; title: string }> = await nlListRes.json();
         for (const doc of docs) {
           try {
             const detailRes = await fetchWithRetry(`${apiUrl}/documents/${doc.id}`, {
-              signal: AbortSignal.timeout(15000),
+              signal: AbortSignal.timeout(45000),
               headers: { "X-API-Key": apiKey }
             });
             if (!detailRes.ok) continue;
