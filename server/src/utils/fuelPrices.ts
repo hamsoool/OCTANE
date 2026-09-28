@@ -32,6 +32,10 @@ let cache: CacheEntry | null = null;
 const getApiUrl = () => process.env.DOE_API_URL ?? "https://soul-scaper.onrender.com";
 const getApiKey = () => process.env.DOE_API_KEY ?? "";
 
+if (!process.env.DOE_API_KEY) {
+  console.error("[fuelPrices] DOE_API_KEY is not set — soul-scraper calls will 401 and stations will show estimates only.");
+}
+
 async function fetchWithRetry(
   url: string,
   options: RequestInit,

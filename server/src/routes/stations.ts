@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { getFuelPrices, calculateStationPrices } from "../utils/fuelPrices.js";
 import { getRedis } from "../utils/redis.js";
+import CachedStation from "../models/CachedStation.js";
 
 const router = Router();
 
@@ -38,8 +39,19 @@ const getSeededPrice = (osmId: number, brand?: string): string => {
   return price.toFixed(3);
 };
 
-async function fetchOverpassStations(): Promise<any[] | null> {
-  const query = `[out:json][timeout:25];
+// Overpass instances tried in order — the primary frequently throttles
+// datacenter IPs, so fallbacks keep cold starts working.
+const OVERPASS_INSTANCES = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+];
+
+// Station geography changes rarely; a week-old list beats an empty map.
+const STATION_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+let refreshInFlight = false;
+
+const OVERPASS_QUERY = `[out:json][timeout:25];
 (
   area["name"="Zambales"];
   area["name"="Olongapo"];
@@ -51,40 +63,124 @@ async function fetchOverpassStations(): Promise<any[] | null> {
 );
 out center;`;
 
-  try {
-    const response = await fetch("https://overpass-api.de/api/interpreter", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": "octane-fuel-price-intelligence-client"
-      },
-      body: "data=" + encodeURIComponent(query)
-    });
+function mapOverpassElements(data: any): any[] | null {
+  if (!data.elements) return null;
+  const stations = data.elements.map((el: any) => {
+    const lat = el.lat ?? el.center?.lat;
+    const lon = el.lon ?? el.center?.lon;
+    const name = cleanStationName(el.tags?.name, el.tags?.brand);
+    return {
+      id: el.id.toString(),
+      name,
+      brand: (el.tags?.brand || el.tags?.name || "").toLowerCase(),
+      coordinates: [lon, lat]
+    };
+  }).filter((s: any) => !isNaN(s.coordinates[0]) && !isNaN(s.coordinates[1]));
 
-    if (!response.ok) {
-      throw new Error(`HTTP error ${response.status}`);
-    }
+  return stations.length > 0 ? stations : null;
+}
 
-    const data = (await response.json()) as any;
-    if (!data.elements) return null;
+async function fetchFromOverpass(url: string): Promise<any[] | null> {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": "octane-fuel-price-intelligence-client"
+    },
+    body: "data=" + encodeURIComponent(OVERPASS_QUERY),
+    signal: AbortSignal.timeout(45000),
+  });
 
-    const stations = data.elements.map((el: any) => {
-      const lat = el.lat ?? el.center?.lat;
-      const lon = el.lon ?? el.center?.lon;
-      const name = cleanStationName(el.tags?.name, el.tags?.brand);
-      return {
-        id: el.id.toString(),
-        name,
-        brand: (el.tags?.brand || el.tags?.name || "").toLowerCase(),
-        coordinates: [lon, lat]
-      };
-    }).filter((s: any) => !isNaN(s.coordinates[0]) && !isNaN(s.coordinates[1]));
-
-    return stations.length > 0 ? stations : null;
-  } catch (error) {
-    console.error("Error fetching from Overpass API:", error);
-    return null;
+  if (!response.ok) {
+    throw new Error(`HTTP error ${response.status}`);
   }
+
+  return mapOverpassElements(await response.json());
+}
+
+async function persistStations(stations: any[]): Promise<void> {
+  const ops = stations.map((s) => ({
+    updateOne: {
+      filter: { stationId: s.id },
+      update: { $set: { name: s.name, brand: s.brand, coordinates: s.coordinates, refreshedAt: new Date() } },
+      upsert: true,
+    },
+  }));
+  await CachedStation.bulkWrite(ops);
+  inMemoryCache = { stations, fetchedAt: Date.now() };
+  const redis = getRedis();
+  if (redis) {
+    await redis.setex(REDIS_STATIONS_KEY, REDIS_CACHE_TTL_SEC, JSON.stringify(stations)).catch((err: any) => console.error("Redis cache write error:", err));
+  }
+}
+
+async function refreshStationCache(): Promise<any[] | null> {
+  if (refreshInFlight) return null;
+  refreshInFlight = true;
+  try {
+    for (const url of OVERPASS_INSTANCES) {
+      try {
+        const stations = await fetchFromOverpass(url);
+        if (stations) {
+          await persistStations(stations);
+          return stations;
+        }
+      } catch (error) {
+        console.error(`Error fetching from Overpass (${url}):`, error);
+      }
+    }
+    return null;
+  } finally {
+    refreshInFlight = false;
+  }
+}
+
+async function getStations(): Promise<any[] | null> {
+  const redis = getRedis();
+
+  // 1. In-memory (1h)
+  if (inMemoryCache && Date.now() - inMemoryCache.fetchedAt < IN_MEMORY_TTL_MS) {
+    return inMemoryCache.stations;
+  }
+
+  // 2. Redis (24h)
+  if (redis) {
+    try {
+      const cached = await redis.get(REDIS_STATIONS_KEY);
+      if (cached) {
+        const stations = typeof cached === "string" ? JSON.parse(cached) : (cached as any[]);
+        inMemoryCache = { stations, fetchedAt: Date.now() };
+        return stations;
+      }
+    } catch (err) {
+      console.error("Redis cache read error:", err);
+    }
+  }
+
+  // 3. Mongo (durable across sleeps/redeploys). Serve even when stale;
+  //    kick off a background refresh instead of blocking the response.
+  try {
+    const docs = await CachedStation.find().lean();
+    if (docs && docs.length > 0) {
+      const stations = docs.map((d: any) => ({
+        id: d.stationId,
+        name: d.name,
+        brand: d.brand,
+        coordinates: d.coordinates,
+      }));
+      inMemoryCache = { stations, fetchedAt: Date.now() };
+      const oldest = docs.reduce((m: number, d: any) => Math.min(m, new Date(d.refreshedAt).getTime()), Date.now());
+      if (Date.now() - oldest > STATION_CACHE_MAX_AGE_MS) {
+        refreshStationCache().catch((err) => console.error("Background station refresh failed:", err));
+      }
+      return stations;
+    }
+  } catch (err) {
+    console.error("Mongo station cache read error:", err);
+  }
+
+  // 4. Live refresh (first boot / empty cache). Nothing else to fall back to.
+  return refreshStationCache();
 }
 
 router.get("/trends", async (req, res) => {
@@ -147,52 +243,10 @@ router.get("/trends", async (req, res) => {
 });
 
 router.get("/", async (req, res) => {
-  const redis = getRedis();
-  let stations: any[] | null = null;
-  let fromRedis = false;
+  // Station list: memory → Redis → Mongo → live Overpass refresh.
+  let stations = await getStations();
 
-  // 1. Try Redis cache
-  if (redis) {
-    try {
-      const cached = await redis.get(REDIS_STATIONS_KEY);
-      if (cached) {
-        stations = typeof cached === "string" ? JSON.parse(cached) : (cached as any[]);
-        fromRedis = true;
-      }
-    } catch (err) {
-      console.error("Redis cache read error:", err);
-    }
-  }
-
-  // 2. Fall back to in-memory if no Redis data
-  if (!stations && inMemoryCache) {
-    stations = inMemoryCache.stations;
-  }
-
-  // 3. Refresh from Overpass if needed
-  const cacheAge = inMemoryCache ? Date.now() - inMemoryCache.fetchedAt : Infinity;
-  const isStale = cacheAge >= IN_MEMORY_TTL_MS;
-
-  if (!stations || (!fromRedis && isStale)) {
-    const overpassData = await fetchOverpassStations();
-    if (overpassData) {
-      stations = overpassData;
-      inMemoryCache = { stations: overpassData, fetchedAt: Date.now() };
-      fromRedis = false;
-
-      if (redis) {
-        redis.setex(REDIS_STATIONS_KEY, REDIS_CACHE_TTL_SEC, JSON.stringify(overpassData))
-          .catch((err: any) => console.error("Redis cache write error:", err));
-      }
-    }
-  }
-
-  // 4. Last resort: stale in-memory
-  if (!stations && inMemoryCache) {
-    stations = inMemoryCache.stations;
-  }
-
-  // 5. Still no data — return empty
+  // Still no data — return empty
   if (!stations) {
     res.json([]);
     return;
