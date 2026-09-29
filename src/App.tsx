@@ -4,6 +4,7 @@ import AppLayout from "./components/AppLayout";
 import Landing from "./pages/Landing";
 import AuthPage from "./pages/AuthPage";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfUse from "./pages/TermsOfUse";
 import Dashboard from "./pages/Dashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import Stations from "./pages/Stations";
@@ -18,6 +19,7 @@ const App: Component = () => {
         <Route path="/" component={Landing} />
         <Route path="/auth" component={AuthPage} />
         <Route path="/privacy" component={PrivacyPolicy} />
+        <Route path="/terms" component={TermsOfUse} />
         <Route path="/dashboard" component={AppLayout}>
           <Route path="/" component={Dashboard} />
         </Route>

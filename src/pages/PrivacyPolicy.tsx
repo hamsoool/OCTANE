@@ -10,22 +10,22 @@ const SECTIONS: Array<{ index: string; title: string; body: string }> = [
   {
     index: "02",
     title: "EMAIL VERIFICATION",
-    body: "Registration sends a 6-digit code to your email address. The code is stored hashed and expires shortly after it is issued. Your address is used only for verification and account recovery.",
+    body: "Registration sends a 6-digit code to your email address. The code is stored hashed, expires shortly after it is issued, and is deleted once used. We resend it when you sign in with an unverified account. Your address is used to confirm ownership and to send that code. It is never sold or shared, and there is no marketing email.",
   },
   {
     index: "03",
     title: "SESSION",
-    body: "Signing in keeps a session token, your username, and your role in your browser's local storage so you stay signed in. Signing out or clearing site data removes it from the device.",
+    body: "Signing in sets one essential cookie called 'session'. It is httpOnly, so scripts on this site cannot read it, and it expires after 24 hours. Your username and role are held in memory for the current tab only and are not written to browser storage. Signing out clears the cookie.",
   },
   {
     index: "04",
     title: "WATCHLIST",
-    body: "Stations you save — name, brand, location, preferred grade, and the price snapshot shown — are stored linked to your account so your watchlist follows you. Removing a station deletes that record.",
+    body: "Stations you save: name, brand, coordinates, preferred grade, and a price snapshot are stored linked to your account so your watchlist follows you. Removing a station deletes that record.",
   },
   {
     index: "05",
     title: "COOKIES",
-    body: "Essential session cookies keep you signed in. Optional functional, statistics, and marketing preferences are set through the cookie banner and stored in your browser and on your account. You can change them any time from the banner.",
+    body: "Only one cookie is actually set: the essential session cookie described above. No advertising, analytics, or cross-site tracking cookies are used, and no third-party trackers are embedded on this site. A cookie banner appears the first time you visit so you can choose between accepting everything or only what is strictly necessary. You can change that choice at any time from the cookie icon in the bottom corner, or from the Cookie Settings link in the footer. Your selection is stored in this browser and on your account, and can be cleared at any time by clearing site data or asking us to remove it.",
   },
   {
     index: "06",
@@ -35,12 +35,12 @@ const SECTIONS: Array<{ index: string; title: string; body: string }> = [
   {
     index: "07",
     title: "WHAT WE DON'T COLLECT",
-    body: "No payment details, no background tracking, no advertising profiles. Your data is never sold. Short-lived server logs and IP-based rate limiting exist only to keep the service running and block abuse.",
+    body: "No payment details, no background tracking, no advertising profiles, no third-party trackers. Your data is never sold. The server keeps short-lived request logs and rate-limits by IP address to keep the service running and block abuse.",
   },
   {
     index: "08",
     title: "ACCESS & DELETION",
-    body: "To review, export, or delete your account and its data, email soul.jsx@gmail.com from your registered address and it will be handled manually.",
+    body: "To review, export, or delete your account and its data, email soul.jsx@gmail.com from your registered address. Deletion removes your account, your watchlist entries, and your stored cookie preferences. Passwords cannot be recovered because only a one-way hash is kept; if you lose yours, the site admin resets the account.",
   },
 ];
 
@@ -48,14 +48,14 @@ const PrivacyPolicy: Component = () => {
   const navigate = useNavigate();
 
   return (
-    <div class="bg-black text-on-surface min-h-screen px-container-margin py-xl">
+    <div class="bg-black text-on-surface min-h-dvh px-container-margin py-xl">
       <div class="max-w-4xl mx-auto flex flex-col gap-lg">
         <button
-          onClick={() => navigate("/")}
+          onClick={() => navigate(-1)}
           class="self-start flex items-center gap-xs font-label-md text-label-md text-text-muted uppercase tracking-[2px] hover:text-primary transition-colors cursor-pointer"
         >
           <span class="material-symbols-outlined text-[18px]">arrow_back</span>
-          BACK TO HOME
+          BACK
         </button>
 
         <div class="border-b border-hairline pb-md">
@@ -63,10 +63,11 @@ const PrivacyPolicy: Component = () => {
           <h1 class="font-headline-lg text-headline-lg text-primary uppercase mb-xs">
             PRIVACY POLICY
           </h1>
-          <p class="font-body-md text-body-md text-text-body">
-            What signing in collects — nothing more.
+          <p class="font-body-md text-body-md text-text-body leading-relaxed">
+            An account is optional, and the map works without one. This is the
+            full list of what signing in stores, and what it does not.
           </p>
-          <span class="font-label-sm text-[10px] text-text-muted uppercase tracking-[2px]">
+          <span class="font-label-sm text-label-sm text-text-muted uppercase tracking-[2px]">
             LAST UPDATED: SEPTEMBER 2026
           </span>
         </div>
@@ -88,8 +89,14 @@ const PrivacyPolicy: Component = () => {
           >
             soul.jsx@gmail.com
           </a>
+          <button
+            onClick={() => navigate("/terms")}
+            class="self-start mt-sm font-label-sm text-label-sm text-text-body uppercase tracking-[2px] underline underline-offset-4 decoration-hairline hover:text-primary transition-colors"
+          >
+            READ THE TERMS OF USE
+          </button>
           <span class="font-label-md text-label-md text-text-muted uppercase mt-md">
-            MADE BY SOUL.jsx · © {new Date().getFullYear()} OCTANE
+            SOUL.jsx &middot; &copy; {new Date().getFullYear()} OCTANE
           </span>
         </div>
       </div>

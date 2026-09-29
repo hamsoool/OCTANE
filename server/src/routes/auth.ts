@@ -5,6 +5,7 @@ import User from "../models/User.js";
 import { sendVerificationCode } from "../utils/email.js";
 import { getRedis } from "../utils/redis.js";
 import { ipRateLimit } from "../middleware/rateLimit.js";
+import { forgotPasswordRateLimit } from "../middleware/forgotRateLimit.js";
 import { authenticateToken } from "../middleware/auth.js";
 import type { AuthRequest } from "../middleware/auth.js";
 
@@ -320,6 +321,67 @@ router.post("/logout", (_req: Request, res: Response) => {
     sameSite: isProduction ? "none" : "lax",
   });
   res.json({ message: "Logged out." });
+});
+
+// POST /api/auth/forgot-password
+router.post("/forgot-password", forgotPasswordRateLimit, async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      res.status(400).json({ message: "Email is required." });
+      return;
+    }
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!user) {
+      // Don't leak whether the email exists
+      res.json({ message: "If an account exists, a reset code has been sent." });
+      return;
+    }
+
+    const code = generateCode();
+    user.verificationCode = code;
+    user.verificationExpires = new Date(Date.now() + 10 * 60 * 1000);
+    user.lastCodeSentAt = new Date();
+    await user.save();
+    sendPasswordResetCode({ to: user.email, username: user.username, code }).catch(console.error);
+
+    res.json({ message: "If an account exists, a reset code has been sent.", userId: user.userId });
+  } catch (error) {
+    console.error("Forgot password error:", error);
+    res.status(500).json({ message: "System error." });
+  }
+});
+
+// POST /api/auth/reset-password
+router.post("/reset-password", async (req: Request, res: Response) => {
+  try {
+    const { userId, code, password } = req.body;
+    if (!userId || !code || !password) {
+      res.status(400).json({ message: "All fields are required." });
+      return;
+    }
+    const user = await User.findOne({ userId });
+    if (!user || !user.verificationCode || !user.verificationExpires || user.verificationExpires < new Date()) {
+      res.status(400).json({ message: "Invalid or expired code." });
+      return;
+    }
+
+    const isValid = await user.compareVerificationCode(code);
+    if (!isValid) {
+      res.status(401).json({ message: "Invalid verification code." });
+      return;
+    }
+
+    user.password = password;
+    user.verificationCode = null;
+    user.verificationExpires = null;
+    await user.save();
+
+    res.json({ message: "Password updated successfully." });
+  } catch (error) {
+    console.error("Reset password error:", error);
+    res.status(500).json({ message: "System error." });
+  }
 });
 
 export default router;

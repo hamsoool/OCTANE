@@ -725,6 +725,12 @@ const Landing: Component = () => {
                 PRIVACY POLICY
               </button>
               <button
+                onClick={() => navigate("/terms")}
+                class="font-label-md text-label-md text-text-muted hover:text-white transition-colors text-left cursor-pointer"
+              >
+                TERMS OF USE
+              </button>
+              <button
                 onClick={() => requestCookieConsent()}
                 class="font-label-md text-label-md text-text-muted hover:text-white transition-colors text-left cursor-pointer"
               >
@@ -747,7 +753,7 @@ const Landing: Component = () => {
           <div class="pt-md flex flex-col md:flex-row justify-between items-center gap-xs border-t border-hairline font-label-sm text-[10px] text-text-muted uppercase tracking-[1px]">
             <span>© {new Date().getFullYear()} OCTANE</span>
             <span class="opacity-60">ALL PRICES APPROX · NOT PUMP READINGS</span>
-            <span class="opacity-60">MADE BY SOUL.jsx</span>
+            <span class="opacity-60">SOUL.jsx</span>
           </div>
         </div>
       </footer>
@@ -803,23 +809,39 @@ const GradeBars: Component<{ grades: Array<{ label: string; value: number | null
 const FAQ_ITEMS: Array<{ q: string; a: string }> = [
   {
     q: "Are these the actual pump prices?",
-    a: "No. They're weekly estimates built from aggregated regional data — close enough to plan around, but always check the signboard before you fill up.",
+    a: "No. Every price starts from the Department of Energy's weekly North Luzon release and is adjusted per brand and per city. That makes it reliable enough to plan a fill-up around, not a replacement for reading the signboard. Any single station can sit above or below the number shown.",
+  },
+  {
+    q: "Why do nearby stations show the same price?",
+    a: "Because the source data is regional, not per pump. The DOE publishes a price per grade per city, and the app applies the published adjustment for each brand. Two stations of the same brand in the same city land on the same figure even when their signboards disagree.",
+  },
+  {
+    q: "Which grade should I look at?",
+    a: "Most cars here run RON 91, and that is the number shown as the main price. Open any station to see diesel, RON 91, RON 95 and RON 97 side by side, each labelled with the brand's own name, so Caltex Silver and Shell FuelSave never both read as plain unleaded.",
+  },
+  {
+    q: "Is now a good time to fill up?",
+    a: "Prices move in steps rather than smoothly, and a drop usually takes a week to come back. Save a few stations and the watchlist compares each one against last week or last month, so you can see whether a price is still climbing or has already turned around. That is history, not a forecast.",
+  },
+  {
+    q: "Which towns are covered?",
+    a: "Every fuel station mapped in Zambales, which includes Olongapo City, Subic and the towns between them. The DOE publishes brand adjustments for Olongapo and Subic only, so stations elsewhere in the province fall back to the nearest of those two.",
+  },
+  {
+    q: "How fresh is the price data?",
+    a: "The DOE publishes a new set of pump prices every week. The app pulls that release, caches it for a day so pages stay fast, and stamps every station with the week it came from. The station list itself comes from OpenStreetMap and changes rarely.",
   },
   {
     q: "Do I need an account?",
-    a: "Not for the map — it's open to everyone. You only need one if you want to save stations to a watchlist.",
+    a: "Not to use the map. Browsing, searching and checking prices all work signed out. A free account is only needed to keep a watchlist, and registration sends a six-digit code to your email once to confirm the address.",
   },
   {
-    q: "Which areas are covered?",
-    a: "Olongapo City and Subic, Zambales. That's it for now — it's a local project.",
+    q: "Can it sort by price or send alerts?",
+    a: "Not yet. The map sorts by distance and there are no price alerts yet. What it does give you is every grade at every station, so opening two or three and comparing takes a few seconds. Weekly alerts are on the list of things to build.",
   },
   {
-    q: "How often do prices update?",
-    a: "The data refreshes weekly, and the app caches it for a day so pages stay fast.",
-  },
-  {
-    q: "Who's behind this?",
-    a: "SOUL.jsx — a local passion project. Questions or corrections: soul.jsx@gmail.com.",
+    q: "What happens to my location?",
+    a: "It stays on your device. Sharing GPS or dropping a pin is only used to sort stations by road distance and draw a route, and the position itself is not attached to your account. Map search and routing are handled by Nominatim and OSRM, which receive those queries under their own policies.",
   },
 ];
 
@@ -829,9 +851,9 @@ const FaqSection: Component = () => {
     <section class="bg-black py-section-gap px-container-margin">
       <div class="max-w-4xl mx-auto">
         <div class="mb-lg reveal">
-          <span class="font-label-sm text-label-sm text-text-muted uppercase mb-xs block">STRAIGHT ANSWERS</span>
+          <span class="font-label-sm text-label-sm text-text-muted uppercase mb-xs block">THE HONEST VERSION</span>
           <h2 class="font-headline-lg text-headline-lg text-primary uppercase">
-            ASKED A LOT
+            WHAT DRIVERS ASK
           </h2>
         </div>
         <div class="reveal border-t border-hairline">

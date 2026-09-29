@@ -13,10 +13,14 @@ export interface IUser extends Document {
   verificationCode: string | null;
   verificationExpires: Date | null;
   lastCodeSentAt: Date | null;
+  resetCode: string | null;
+  resetExpires: Date | null;
+  lastResetSentAt: Date | null;
   cookiePreferences: { functional: boolean; statistics: boolean; marketing: boolean } | null;
   createdAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
   compareVerificationCode(code: string): Promise<boolean>;
+  compareResetCode(code: string): Promise<boolean>;
 }
 
 const userSchema = new Schema<IUser>({
@@ -67,6 +71,18 @@ const userSchema = new Schema<IUser>({
     type: Date,
     default: null,
   },
+  resetCode: {
+    type: String,
+    default: null,
+  },
+  resetExpires: {
+    type: Date,
+    default: null,
+  },
+  lastResetSentAt: {
+    type: Date,
+    default: null,
+  },
   cookiePreferences: {
     type: Schema.Types.Mixed,
     default: null,
@@ -85,6 +101,9 @@ userSchema.pre("save", async function (next) {
   if (this.isModified("verificationCode") && this.verificationCode) {
     this.verificationCode = await bcrypt.hash(this.verificationCode, salt);
   }
+  if (this.isModified("resetCode") && this.resetCode) {
+    this.resetCode = await bcrypt.hash(this.resetCode, salt);
+  }
   next();
 });
 
@@ -95,6 +114,11 @@ userSchema.methods.comparePassword = async function (candidatePassword: string):
 userSchema.methods.compareVerificationCode = async function (code: string): Promise<boolean> {
   if (!this.verificationCode) return false;
   return bcrypt.compare(code, this.verificationCode);
+};
+
+userSchema.methods.compareResetCode = async function (code: string): Promise<boolean> {
+  if (!this.resetCode) return false;
+  return bcrypt.compare(code, this.resetCode);
 };
 
 const User = mongoose.model<IUser>("User", userSchema);
