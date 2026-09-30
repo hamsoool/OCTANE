@@ -63,7 +63,27 @@ export default defineConfig({
             },
           },
           {
-            urlPattern: /\/api\/.*/i,
+            // OpenFreeMap style JSON + vector tile pyramid. StaleWhileRevalidate
+            // serves tiles instantly from cache and refreshes in the background,
+            // so repeat visits never block on the network.
+            urlPattern: /^https:\/\/tiles\.openfreemap\.org\/.*/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'openfreemap-cache',
+              expiration: {
+                maxEntries: 300,
+                maxAgeSeconds: 60 * 60 * 24 * 7,
+                purgeOnQuotaError: true,
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Only public, identity-free data. auth/*, /api/audit and
+            // /api/saved-stations must never be cached: workbox keys by URL, not
+            // by user, so a cached authenticated response could be replayed to a
+            // different account on a shared device.
+            urlPattern: /\/api\/stations(\?.*)?$/i,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cache',

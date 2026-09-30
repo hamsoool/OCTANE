@@ -8,6 +8,7 @@ import { fileURLToPath } from "url";
 import authRoutes from "./routes/auth.js";
 import stationsRoutes from "./routes/stations.js";
 import savedStationsRoutes from "./routes/savedStations.js";
+import auditRoutes from "./routes/audit.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -41,6 +42,7 @@ if (process.env.NODE_ENV !== "production") {
 app.use("/api/auth", authRoutes);
 app.use("/api/stations", stationsRoutes);
 app.use("/api/saved-stations", savedStationsRoutes);
+app.use("/api/audit", auditRoutes);
 
 // Health check
 app.get("/api/health", (_req, res) => {

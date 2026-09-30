@@ -9,9 +9,10 @@ Region-based fuel price intelligence and watchlist application. Track real-time 
 - **Station Search** — debounced Nominatim geocoding search with coordinate parsing, station name filter, and LRU-cached suggestions dropdown
 - **Authentication** — username/password login and registration with 6-digit OTP verification via email (Brevo), JWT session cookies, idle timeout logout, and role-based access (regular / admin)
 - **Dashboard** — regional price benchmarks, image carousel, and market trend indicators
-- **Admin Console** — operator directory, system stats, and audit trail access (admin only)
+- **Admin Console** — audit log of operator activity (sign-ins, lockouts, verifications, password resets, watchlist changes), paginated and filterable by action and operator (admin only)
 - **Station List** — terminal detail view with status badges, grade-level pricing, and geographic metadata
 - **Cookie Consent** — two-tier consent (necessary-only or all) with granular preference toggles synced to user profile
+- **Profile & Settings** — save your name, phone, and address; the address is geocoded and becomes your default map origin, with GPS and pin-drop available as temporary overrides (email is read-only)
 - **Responsive Design** — mobile-first layout with collapsible sidebar, bottom navigation, desktop top navigation with settings dropdown
 
 ## Tech Stack

@@ -169,6 +169,27 @@ const Landing: Component = () => {
   const [syncTime, setSyncTime] = createSignal("");
   const [stations, setStations] = createSignal<Station[]>([]);
 
+  // Teardown handles, held at component scope so onCleanup can reach them.
+  // Solid discards the return value of onMount (onMount is just an untracked
+  // createEffect), so a teardown returned from inside onMount never runs.
+  let mapInstance: maplibregl.Map | null = null;
+  let markers: maplibregl.Marker[] = [];
+  // Full station set, kept so the ticker averages cover the whole region even
+  // when only a viewport's worth of markers are rendered.
+  let allStations: Station[] = [];
+  // Markers are built once and then added/removed as the viewport changes;
+  // rebuilding popup HTML on every pan is expensive. MapLibre's Marker has no
+  // isAdded(), so addedMarkerIds tracks which ones are currently on the map.
+  const markerCache = new Map<string, maplibregl.Marker>();
+  const addedMarkerIds = new Set<string>();
+  let resizeObserver: ResizeObserver | null = null;
+  let revealObserver: IntersectionObserver | null = null;
+  let initTimer: ReturnType<typeof setTimeout> | undefined;
+  let scrollHandler: (() => void) | undefined;
+  let ticking = false;
+  const offsetTimers: Array<ReturnType<typeof setTimeout>> = [];
+  let disposed = false;
+
   // Live price ticker: grade averages across the stations currently on the map.
   // Only real fuel data counts — seeded estimate prices (~₱2) fall outside the
   // sanity range, and live elements hide entirely until live data arrives.
@@ -206,10 +227,33 @@ const Landing: Component = () => {
     setSyncTime(formatted);
   };
 
+  // Teardown, registered synchronously so it always lands on the component's
+  // owner. Solid restores the global Owner when an async fn yields, so an
+  // onCleanup() placed after an `await` would attach to the wrong owner and
+  // never fire. Handles are assigned as setup proceeds; cleanup is idempotent.
+  onCleanup(() => {
+    disposed = true;
+    if (scrollHandler) window.removeEventListener("scroll", scrollHandler);
+    window.removeEventListener("resize", updateOffset);
+    window.removeEventListener("load", updateOffset);
+    offsetTimers.forEach(clearTimeout);
+    clearTimeout(initTimer);
+    revealObserver?.disconnect();
+    resizeObserver?.disconnect();
+    markers.forEach((m) => m.remove());
+    markers = [];
+    markerCache.forEach((m) => m.remove());
+    markerCache.clear();
+    addedMarkerIds.clear();
+    mapInstance?.remove();
+    mapInstance = null;
+  });
+
   onMount(async () => {
     if (!isAuthenticated()) {
       await checkSession();
     }
+    if (disposed) return;
     if (isAuthenticated()) {
       navigate(getRole() === "admin" ? "/admin" : "/dashboard", { replace: true });
       return;
@@ -226,6 +270,7 @@ const Landing: Component = () => {
         ticking = false;
       });
     };
+    scrollHandler = handleScroll;
 
     window.addEventListener("scroll", handleScroll, { passive: true });
     window.addEventListener("resize", updateOffset);
@@ -235,12 +280,14 @@ const Landing: Component = () => {
     updateOffset();
 
     // Fire at multiple delays so the layout (including map card) is fully settled
-    const timer1 = setTimeout(updateOffset, 100);
-    const timer2 = setTimeout(updateOffset, 350);
-    const timer3 = setTimeout(updateOffset, 700);
+    offsetTimers.push(
+      setTimeout(updateOffset, 100),
+      setTimeout(updateOffset, 350),
+      setTimeout(updateOffset, 700),
+    );
 
     const revealEls = document.querySelectorAll(".reveal");
-    const observer = new IntersectionObserver(
+    revealObserver = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
@@ -250,16 +297,106 @@ const Landing: Component = () => {
       },
       { threshold: 0.15 }
     );
-    revealEls.forEach((el) => observer.observe(el));
+    revealEls.forEach((el) => revealObserver!.observe(el));
 
     // Initialize Map for Guest
     updateSyncTime();
-    let mapInstance: maplibregl.Map | null = null;
-    let markers: maplibregl.Marker[] = [];
-    let ticking = false;
+
+    // Render a marker only for stations inside the current viewport. Without
+    // this the landing map draws a marker for every station in the region.
+    const buildMarker = (station: Station) => {
+      const el = document.createElement("div");
+      el.id = `landing-marker-${station.id}`;
+      // DO NOT add maplibregl-marker here — MapLibre adds that to its own wrapper
+      el.style.cssText = "display:flex;align-items:center;justify-content:center;cursor:pointer;";
+      el.innerHTML = `<span class="material-symbols-outlined" style="font-size:26px;color:#e0e0e0;filter:drop-shadow(0 0 4px #e0e0e040);font-variation-settings:'FILL' 1;">local_gas_station</span>`;
+
+      const popup = new maplibregl.Popup({
+        offset: [0, -12],
+        closeButton: false,
+        anchor: "bottom",
+        className: "custom-telemetry-popup",
+        maxWidth: "280px",
+      }).setHTML(`
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#ffffff;text-transform:uppercase;">
+          <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #262626;padding-bottom:6px;margin-bottom:6px;">
+            <span style="font-family:'Azonix',sans-serif;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:4px;">${station.name}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:4px;">
+            <span style="color:#cccccc;">PRICE (APPROX):</span>
+            <span style="color:#c3d9f3;font-size:13px;">~₱${station.price}</span>
+          </div>
+          ${station.fuelData ? `
+          <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:3px;font-size:9px;">
+            <span style="color:#999999;">${fuelLabel(station.brand, "diesel")}:</span>
+            <span style="color:#cccccc;">${station.fuelData.diesel ?? "—"}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:3px;font-size:9px;">
+            <span style="color:#999999;">${fuelLabel(station.brand, "ron91")}:</span>
+            <span style="color:#cccccc;">${station.fuelData.ron91 ?? "—"}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:3px;font-size:9px;">
+            <span style="color:#999999;">${fuelLabel(station.brand, "ron95")}:</span>
+            <span style="color:#cccccc;">${station.fuelData.ron95 ?? "—"}</span>
+          </div>
+          ${String(station.brand ?? "").toLowerCase().includes("shell") ? `
+          <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:3px;font-size:9px;">
+            <span style="color:#999999;">${fuelLabel(station.brand, "ron97")}:</span>
+            <span style="color:#cccccc;">${station.fuelData.ron97 ?? "—"}</span>
+          </div>` : ""}
+          ` : ""}
+          <div style="display:flex;justify-content:center;margin-top:6px;padding-top:6px;border-top:1px solid #262626;">
+            <button class="save-station-btn" style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:#c3d9f3;background:none;border:none;cursor:pointer;" data-station-id="${station.id}">
+              SIGN IN TO SAVE
+            </button>
+          </div>
+        </div>
+      `);
+
+      popup.on("open", () => {
+        const btn = popup.getElement()?.querySelector(".save-station-btn");
+        if (btn) {
+          btn.addEventListener("click", () => navigate("/auth"));
+        }
+      });
+
+      return new maplibregl.Marker({ element: el })
+        .setLngLat(station.coordinates as [number, number])
+        .setPopup(popup);
+    };
+
+    const syncVisibleMarkers = () => {
+      if (!mapInstance || disposed) return;
+      const bounds = mapInstance.getBounds();
+
+      for (const station of allStations) {
+        const visible = bounds.contains(station.coordinates);
+        const added = addedMarkerIds.has(station.id);
+
+        if (!visible) {
+          if (added) {
+            markerCache.get(station.id)?.remove();
+            addedMarkerIds.delete(station.id);
+            markers = markers.filter((m) => m !== markerCache.get(station.id));
+          }
+          continue;
+        }
+
+        if (!added) {
+          let marker = markerCache.get(station.id);
+          if (!marker) {
+            marker = buildMarker(station);
+            markerCache.set(station.id, marker);
+          }
+          marker.addTo(mapInstance);
+          addedMarkerIds.add(station.id);
+          markers.push(marker);
+        }
+      }
+    };
 
     const initMap = () => {
-      if (!mapContainer) return;
+      if (!mapContainer || disposed) return;
 
       mapInstance = new maplibregl.Map({
         container: mapContainer,
@@ -271,84 +408,26 @@ const Landing: Component = () => {
 
       mapInstance.addControl(new maplibregl.AttributionControl({ compact: true }));
 
+      // Re-evaluate which stations are on screen after every pan/zoom.
+      mapInstance.on("moveend", syncVisibleMarkers);
+
       mapInstance.on("load", async () => {
-        if (!mapInstance) return;
+        if (!mapInstance || disposed) return;
         // Resize after the DOM has painted so the canvas fills the container
-        setTimeout(() => mapInstance?.resize(), 0);
+        setTimeout(() => {
+          if (!disposed) mapInstance?.resize();
+        }, 0);
         setMap(mapInstance);
         setLoading(false);
         applyThemeStyle(mapInstance, "DEFAULT");
 
         try {
           const res = await apiGet<Station[]>("/stations");
-          console.log("[OCTANE] Landing stations fetch:", res);
-          if (res.success && res.data && mapInstance) {
-            console.log(`[OCTANE] Adding ${res.data.length} markers`);
+          if (disposed) return;
+          if (res.success && res.data && mapInstance && !disposed) {
+            allStations = res.data;
             setStations(res.data);
-            res.data.forEach((station) => {
-              const el = document.createElement("div");
-              el.id = `landing-marker-${station.id}`;
-              // DO NOT add maplibregl-marker here — MapLibre adds that to its own wrapper
-              el.style.cssText = "display:flex;align-items:center;justify-content:center;cursor:pointer;";
-              el.innerHTML = `<span class="material-symbols-outlined" style="font-size:26px;color:#e0e0e0;filter:drop-shadow(0 0 4px #e0e0e040);font-variation-settings:'FILL' 1;">local_gas_station</span>`;
-
-              const popup = new maplibregl.Popup({
-                offset: [0, -12],
-                closeButton: false,
-                anchor: "bottom",
-                className: "custom-telemetry-popup",
-                maxWidth: "280px",
-              }).setHTML(`
-                <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#ffffff;text-transform:uppercase;">
-                  <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #262626;padding-bottom:6px;margin-bottom:6px;">
-                    <span style="font-family:'Azonix',sans-serif;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:4px;">${station.name}</span>
-                  </div>
-                  <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:4px;">
-                    <span style="color:#cccccc;">PRICE (APPROX):</span>
-                    <span style="color:#c3d9f3;font-size:13px;">~₱${station.price}</span>
-                  </div>
-                  ${station.fuelData ? `
-                  <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:3px;font-size:9px;">
-                    <span style="color:#999999;">${fuelLabel(station.brand, "diesel")}:</span>
-                    <span style="color:#cccccc;">${station.fuelData.diesel ?? "—"}</span>
-                  </div>
-                  <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:3px;font-size:9px;">
-                    <span style="color:#999999;">${fuelLabel(station.brand, "ron91")}:</span>
-                    <span style="color:#cccccc;">${station.fuelData.ron91 ?? "—"}</span>
-                  </div>
-                  <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:3px;font-size:9px;">
-                    <span style="color:#999999;">${fuelLabel(station.brand, "ron95")}:</span>
-                    <span style="color:#cccccc;">${station.fuelData.ron95 ?? "—"}</span>
-                  </div>
-                  ${String(station.brand ?? "").toLowerCase().includes("shell") ? `
-                  <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:3px;font-size:9px;">
-                    <span style="color:#999999;">${fuelLabel(station.brand, "ron97")}:</span>
-                    <span style="color:#cccccc;">${station.fuelData.ron97 ?? "—"}</span>
-                  </div>` : ""}
-                  ` : ""}
-                  <div style="display:flex;justify-content:center;margin-top:6px;padding-top:6px;border-top:1px solid #262626;">
-                    <button class="save-station-btn" style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:#c3d9f3;background:none;border:none;cursor:pointer;" data-station-id="${station.id}">
-                      SIGN IN TO SAVE
-                    </button>
-                  </div>
-                </div>
-              `);
-
-              popup.on("open", () => {
-                const popupEl = popup.getElement();
-                const btn = popupEl?.querySelector(".save-station-btn");
-                if (btn) {
-                  btn.addEventListener("click", () => navigate("/auth"));
-                }
-              });
-
-              const marker = new maplibregl.Marker({ element: el })
-                .setLngLat(station.coordinates as [number, number])
-                .setPopup(popup)
-                .addTo(mapInstance!);
-
-              markers.push(marker);
-            });
+            syncVisibleMarkers();
           } else {
             console.warn("[OCTANE] No station data:", res.error);
           }
@@ -359,7 +438,6 @@ const Landing: Component = () => {
     };
 
     // Resize MapLibre whenever the container element resizes
-    let resizeObserver: ResizeObserver | null = null;
     if (mapContainer) {
       resizeObserver = new ResizeObserver(() => {
         mapInstance?.resize();
@@ -368,22 +446,7 @@ const Landing: Component = () => {
     }
 
     // Delay init so the container has real pixel dimensions before MapLibre reads them
-    const initTimer = setTimeout(initMap, 50);
-
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-      window.removeEventListener("resize", updateOffset);
-      window.removeEventListener("load", updateOffset);
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      clearTimeout(timer3);
-      clearTimeout(initTimer);
-      observer.disconnect();
-      resizeObserver?.disconnect();
-      if (mapInstance) {
-        mapInstance.remove();
-      }
-    };
+    initTimer = setTimeout(initMap, 50);
   });
 
   const scrollTo = (id: string) => {

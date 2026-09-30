@@ -167,6 +167,20 @@ const MapPage: Component = () => {
     }
   };
 
+  // The saved profile address is the standing home base. Only seed it when the
+  // user has not already set a GPS or pin origin this session.
+  const fetchSavedOrigin = async () => {
+    const res = await apiGet<{ addressCoords?: [number, number] | null }>("/auth/me");
+    if (!res.success || !res.data?.addressCoords) return;
+    const coords = res.data.addressCoords;
+    if (!Array.isArray(coords) || coords.length !== 2) return;
+    setSavedCoords([coords[0], coords[1]]);
+    if (userLocation() === null) {
+      setUserLocation([coords[0], coords[1]]);
+      setUserLocationMode("saved");
+    }
+  };
+
   const toggleSaveStation = async (station: Station) => {
     const isSaved = savedStationIds().includes(station.id);
     if (isSaved) {
@@ -229,10 +243,12 @@ const MapPage: Component = () => {
   const [stationsLoading, setStationsLoading] = createSignal<boolean>(true);
   const [stationsError, setStationsError] = createSignal<string | null>(null);
 
-  // User origin signals
+  // User origin signals. Mode precedence: an explicit GPS/pin override wins for
+  // the session, otherwise the saved profile address is the origin.
   const [userLocation, setUserLocation] = createSignal<[number, number] | null>(null);
-  const [userLocationMode, setUserLocationMode] = createSignal<"gps" | "pin" | null>(null);
+  const [userLocationMode, setUserLocationMode] = createSignal<"gps" | "pin" | "saved" | null>(null);
   const [isPinMode, setIsPinMode] = createSignal<boolean>(false);
+  const [savedCoords, setSavedCoords] = createSignal<[number, number] | null>(null);
 
   // OSRM road distance cache
   const [roadDistances, setRoadDistances] = createSignal<Record<string, number>>({});
@@ -348,6 +364,7 @@ const MapPage: Component = () => {
 
     fetchOverpassStations();
     fetchSavedStationIds();
+    fetchSavedOrigin();
 
     if (!mapContainer) return;
 
@@ -573,6 +590,8 @@ const MapPage: Component = () => {
         <span class="absolute w-8 h-8 bg-ice-blue opacity-20 rounded-full animate-ping"></span>
         <span class="material-symbols-outlined" style="font-size: 32px; color: #c3d9f3; filter: drop-shadow(0 0 8px #c3d9f3aa); font-variation-settings: 'FILL' 1;">my_location</span>
       </div>`;
+    } else if (mode === "saved") {
+      el.innerHTML = `<span class="material-symbols-outlined" style="font-size: 32px; color: #c3d9f3; filter: drop-shadow(0 0 8px #c3d9f3aa); font-variation-settings: 'FILL' 1;">home</span>`;
     } else {
       el.innerHTML = `<span class="material-symbols-outlined" style="font-size: 32px; color: #c3d9f3; filter: drop-shadow(0 0 8px #c3d9f3aa); font-variation-settings: 'FILL' 1;">pin_drop</span>`;
     }
@@ -766,11 +785,20 @@ const MapPage: Component = () => {
       originMarker = null;
     }
 
-    setUserLocation(null);
-    setUserLocationMode(null);
     setGpsSpeed(null);
     setGpsAccuracy(null);
     setRoadDistances({});
+
+    // Clear only drops the GPS/pin override. The saved profile address is the
+    // standing home base, so fall back to it rather than leaving no origin.
+    const home = savedCoords();
+    if (home) {
+      setUserLocation(home);
+      setUserLocationMode("saved");
+    } else {
+      setUserLocation(null);
+      setUserLocationMode(null);
+    }
   };
 
   // ====== SEARCH ======
@@ -996,9 +1024,13 @@ const MapPage: Component = () => {
           </div>
           {userLocation() && (
             <div class="flex items-center gap-xs mb-xs">
-              <span class="material-symbols-outlined text-[14px] text-ice-blue" style="font-variation-settings: 'FILL' 1;">my_location</span>
+              <span class="material-symbols-outlined text-[14px] text-ice-blue" style="font-variation-settings: 'FILL' 1;">
+                {userLocationMode() === "gps" ? "my_location" : userLocationMode() === "saved" ? "home" : "pin_drop"}
+              </span>
               <span class="font-label-sm text-[9px] text-ice-blue uppercase tracking-[1px]">
-                ORIGIN: {userLocationMode() === "gps" ? (gpsWatchId !== null ? "GPS FIX (LIVE)" : "GPS FIX") : "PIN DROP"}
+                ORIGIN: {userLocationMode() === "gps"
+                  ? (gpsWatchId !== null ? "GPS FIX (LIVE)" : "GPS FIX")
+                  : userLocationMode() === "saved" ? "SAVED ADDRESS" : "PIN DROP"}
               </span>
               {gpsAccuracy() !== null && (
                 <span class="font-label-sm text-[7px] text-text-muted opacity-40 uppercase tracking-[1px]">±{Math.round(gpsAccuracy()!)}M</span>

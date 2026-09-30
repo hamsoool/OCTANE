@@ -2,6 +2,7 @@ import { Router, type Response } from "express";
 import { authenticateToken, type AuthRequest } from "../middleware/auth.js";
 import SavedStation from "../models/SavedStation.js";
 import { getFuelPrices, calculateStationPrices } from "../utils/fuelPrices.js";
+import { recordAudit, AUDIT_ACTIONS } from "../utils/audit.js";
 
 const router = Router();
 
@@ -96,6 +97,13 @@ router.post("/", async (req: AuthRequest, res: Response) => {
 
     const existing = await SavedStation.findOne({ userId: req.user!.id, stationId });
     if (existing) {
+      recordAudit(req, {
+        username: req.user!.username,
+        role: req.user!.role,
+        action: AUDIT_ACTIONS.STATION_SAVED,
+        outcome: "failure",
+        target: name,
+      });
       res.status(409).json({ message: "Station already saved." });
       return;
     }
@@ -110,6 +118,14 @@ router.post("/", async (req: AuthRequest, res: Response) => {
       price,
       priceGrade,
       fuelData,
+    });
+
+    recordAudit(req, {
+      username: req.user!.username,
+      role: req.user!.role,
+      action: AUDIT_ACTIONS.STATION_SAVED,
+      outcome: "success",
+      target: name,
     });
 
     res.status(201).json(saved);
@@ -127,9 +143,24 @@ router.delete("/:stationId", async (req: AuthRequest, res: Response) => {
     });
 
     if (!result) {
+      recordAudit(req, {
+        username: req.user!.username,
+        role: req.user!.role,
+        action: AUDIT_ACTIONS.STATION_REMOVED,
+        outcome: "failure",
+        target: req.params.stationId,
+      });
       res.status(404).json({ message: "Saved station not found." });
       return;
     }
+
+    recordAudit(req, {
+      username: req.user!.username,
+      role: req.user!.role,
+      action: AUDIT_ACTIONS.STATION_REMOVED,
+      outcome: "success",
+      target: result.name,
+    });
 
     res.json({ message: "Station removed from saved." });
   } catch (err) {

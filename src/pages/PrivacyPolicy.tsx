@@ -35,12 +35,17 @@ const SECTIONS: Array<{ index: string; title: string; body: string }> = [
   {
     index: "07",
     title: "WHAT WE DON'T COLLECT",
-    body: "No payment details, no background tracking, no advertising profiles, no third-party trackers. Your data is never sold. The server keeps short-lived request logs and rate-limits by IP address to keep the service running and block abuse.",
+    body: "No payment details, no background tracking, no advertising profiles, no third-party trackers. Your data is never sold. The server rate-limits by IP address to keep the service running and block abuse.",
   },
   {
     index: "08",
+    title: "ACTIVITY LOG",
+    body: "To keep the service secure, operator accounts keep an activity log on the server. When you sign in, sign out, register, verify your email, request or reset a password, change your cookie choices, or save and remove stations, we record the action, whether it succeeded, the time, your username, and your IP address. Passwords and verification codes are never written to this log. Administrators can view it in the operator console, and other users cannot.",
+  },
+  {
+    index: "09",
     title: "ACCESS & DELETION",
-    body: "To review, export, or delete your account and its data, email soul.jsx@gmail.com from your registered address. Deletion removes your account, your watchlist entries, and your stored cookie preferences. Passwords cannot be recovered because only a one-way hash is kept; if you lose yours, the site admin resets the account.",
+    body: "To review, export, or delete your account and its data, email soul.jsx@gmail.com from your registered address. Deletion removes your account, your watchlist entries, and your stored cookie preferences. Entries in the activity log above are kept for security purposes after deletion, without your password. Passwords cannot be recovered because only a one-way hash is kept; if you lose yours, the site admin resets the account.",
   },
 ];
 

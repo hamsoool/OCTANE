@@ -61,17 +61,16 @@ export async function forgotPasswordRateLimit(
     // --- 3. Track distinct emails per IP for blocking logic ---
     const ipAttemptKey = `forgot:ip:${ip}:attempts`;
     // Add email to the set of attempted emails for this IP
-    await redis.sAdd(ipAttemptKey, normalizedEmail);
-    // Set expiration on the attempt key if it's new (we use a multi-command approach via MULTI/EXEC or just set expire after)
-    // We'll set expire to the window if the key is new, but note: SADD may not return if key is new? We'll do a separate check.
-    // Instead, we can set the expire every time (it's idempotent and resets the TTL). Simpler.
+    await redis.sadd(ipAttemptKey, normalizedEmail);
+    // Refresh the window on every attempt. SADD is idempotent for an existing
+    // member, so this keeps the TTL sliding without a separate existence check.
     await redis.expire(ipAttemptKey, IP_ATTEMPT_WINDOW_SEC);
 
     // Get the current count of distinct emails in the set
-    const distinctCount = await redis.sCard(ipAttemptKey);
+    const distinctCount = await redis.scard(ipAttemptKey);
     if (distinctCount >= IP_MAX_DISTINCT_EMAILS) {
       // Block the IP for the specified duration
-      await redis.set(ipBlockedKey, "1", "EX", IP_BLOCK_DURATION_SEC);
+      await redis.set(ipBlockedKey, "1", { ex: IP_BLOCK_DURATION_SEC });
       // Optionally, we could clear the attempt key here to start fresh after block, but not required.
       res.status(429).json({
         message: "Too many forgot password attempts from this IP. Please wait 30 minutes.",

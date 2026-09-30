@@ -6,6 +6,7 @@ const baseNavItems: { href: string; label: string; match: string }[] = [
   { href: "/dashboard", label: "DASHBOARD", match: "dashboard" },
   { href: "/map", label: "MAP", match: "map" },
   { href: "/stations", label: "STATIONS", match: "stations" },
+  { href: "/settings", label: "SETTINGS", match: "settings" },
 ];
 
 const adminNavItems: { href: string; label: string; match: string }[] = [
@@ -88,6 +89,13 @@ const TopNav: Component = () => {
               <div class="font-data-lg text-data-lg text-primary uppercase">{currentUsername || "—"}</div>
             </div>
             <div class="h-px bg-hairline mb-md"></div>
+            <A
+              href="/settings"
+              onClick={() => setMenuOpen(false)}
+              class="w-full h-10 flex items-center justify-center border border-hairline-strong text-primary font-label-md text-label-md uppercase tracking-[2.5px] rounded-full hover:bg-hairline transition-colors mb-xs"
+            >
+              Settings
+            </A>
             <button
               onClick={handleLogout}
               class="w-full h-10 border border-hairline-strong text-primary font-label-md text-label-md uppercase tracking-[2.5px] rounded-full hover:bg-hairline transition-colors"

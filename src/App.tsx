@@ -8,6 +8,7 @@ import TermsOfUse from "./pages/TermsOfUse";
 import Dashboard from "./pages/Dashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import Stations from "./pages/Stations";
+import Settings from "./pages/Settings";
 import CookieConsent from "./components/CookieConsent";
 
 const MapPage = lazy(() => import("./pages/MapPage"));
@@ -31,6 +32,9 @@ const App: Component = () => {
         </Route>
         <Route path="/stations" component={AppLayout}>
           <Route path="/" component={Stations} />
+        </Route>
+        <Route path="/settings" component={AppLayout}>
+          <Route path="/" component={Settings} />
         </Route>
       </Router>
       <CookieConsent />

@@ -90,6 +90,7 @@ const CookieConsent: Component = () => {
   const acceptAll = () => {
     localStorage.setItem(STORAGE_KEY, "all");
     if (isAuthenticated()) syncCookiePreferences({ functional: true, statistics: true, marketing: true });
+
     setState("hidden");
     setShowPrefs(false);
     setAnimating(false);

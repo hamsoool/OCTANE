@@ -1,5 +1,5 @@
-import { Suspense, createSignal, onMount, onCleanup, type Component, type JSX } from "solid-js";
-import { Navigate, useNavigate } from "@solidjs/router";
+import { Suspense, createSignal, onMount, onCleanup, type Component } from "solid-js";
+import { Navigate, useNavigate, type RouteSectionProps } from "@solidjs/router";
 import TopNav from "./TopNav";
 import BottomNav from "./BottomNav";
 import { checkSession, isAuthenticated, clearToken, apiPost } from "../api";
@@ -10,9 +10,10 @@ const ACTIVITY_EVENTS = [
   "mousedown", "keydown", "touchstart", "scroll", "wheel", "visibilitychange",
 ] as const;
 
-interface AppLayoutProps {
-  children: JSX.Element;
-}
+// @solidjs/router hands route sections extra props (params, location, data) that
+// this layout never reads. Accepting them keeps `component={AppLayout}` assignable
+// to Component<RouteSectionProps<unknown>> without weakening the types we do use.
+type AppLayoutProps = RouteSectionProps<unknown>;
 
 const AppLayout: Component<AppLayoutProps> = (props) => {
   const navigate = useNavigate();

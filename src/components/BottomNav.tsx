@@ -6,12 +6,14 @@ const regularItems: { href: string; icon: string; label: string }[] = [
   { href: "/dashboard", icon: "dashboard", label: "DASHBOARD" },
   { href: "/map", icon: "map", label: "MAP" },
   { href: "/stations", icon: "ev_station", label: "STATIONS" },
+  { href: "/settings", icon: "manage_account", label: "SETTINGS" },
 ];
 
 const adminItems: { href: string; icon: string; label: string }[] = [
   { href: "/admin", icon: "admin_panel_settings", label: "ADMIN" },
   { href: "/map", icon: "map", label: "MAP" },
   { href: "/stations", icon: "ev_station", label: "STATIONS" },
+  { href: "/settings", icon: "manage_account", label: "SETTINGS" },
 ];
 
 const BottomNav: Component = () => {
@@ -29,13 +31,15 @@ const BottomNav: Component = () => {
       {items.map((item) => (
         <A
           href={item.href}
-          class="flex flex-col items-center justify-center transition-opacity"
+          class="flex flex-col items-center justify-center transition-opacity min-w-0"
           activeClass="text-primary"
           inactiveClass="text-on-surface-variant hover:text-primary"
           end
         >
           <span class="material-symbols-outlined mb-1">{item.icon}</span>
-          <span class="font-label-sm text-label-sm uppercase tracking-[2.5px]">{item.label}</span>
+          <span class="font-label-sm text-label-sm uppercase tracking-[1.5px] leading-tight text-center">
+            {item.label}
+          </span>
         </A>
       ))}
     </nav>
